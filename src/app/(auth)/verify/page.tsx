@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 export const metadata = {
-  title: 'Verificar Email | DisparaMaker',
+  title: 'Verificar Email | disparai',
   description: 'Verifique seu email para continuar',
 };
 

@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Segurança - DisparaMaker',
+  title: 'Segurança - disparai',
 };
 
 export default function SegurancaPage() {

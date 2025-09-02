@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Importar Contatos - DisparaMaker',
+  title: 'Importar Contatos - disparai',
 };
 
 export default function ContatosImportarPage() {

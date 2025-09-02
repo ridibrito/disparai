@@ -1,4 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 // Tipos para as tabelas do Supabase
 export type Tables = {
@@ -37,30 +38,39 @@ export type Tables = {
   users: {
     Row: {
       id: string;
-      name: string;
-      email: string;
+      full_name: string | null;
+      avatar_url: string | null;
+      bio: string | null;
+      phone: string | null;
       plan_id: string | null;
-      created_at?: string;
-      updated_at?: string;
-      avatar_url?: string | null;
+      billing_address: Record<string, any> | null;
+      payment_method: Record<string, any> | null;
+      created_at: string;
+      updated_at: string;
     };
     Insert: {
       id: string;
-      name?: string;
-      email: string;
+      full_name?: string | null;
+      avatar_url?: string | null;
+      bio?: string | null;
+      phone?: string | null;
       plan_id?: string | null;
+      billing_address?: Record<string, any> | null;
+      payment_method?: Record<string, any> | null;
       created_at?: string;
       updated_at?: string;
-      avatar_url?: string | null;
     };
     Update: {
       id?: string;
-      name?: string;
-      email?: string;
+      full_name?: string | null;
+      avatar_url?: string | null;
+      bio?: string | null;
+      phone?: string | null;
       plan_id?: string | null;
+      billing_address?: Record<string, any> | null;
+      payment_method?: Record<string, any> | null;
       created_at?: string;
       updated_at?: string;
-      avatar_url?: string | null;
     };
   };
   api_connections: {
@@ -113,6 +123,23 @@ export type Tables = {
       name?: string;
       created_at?: string;
       updated_at?: string;
+    };
+  };
+  contact_list_members: {
+    Row: {
+      contact_id: string;
+      list_id: string;
+      created_at: string;
+    };
+    Insert: {
+      contact_id: string;
+      list_id: string;
+      created_at?: string;
+    };
+    Update: {
+      contact_id?: string;
+      list_id?: string;
+      created_at?: string;
     };
   };
   contacts: {
@@ -376,6 +403,7 @@ export type Database = {
       users: Tables['users'];
       api_connections: Tables['api_connections'];
       contact_lists: Tables['contact_lists'];
+      contact_list_members: Tables['contact_list_members'];
       contacts: Tables['contacts'];
       campaigns: Tables['campaigns'];
       conversations: Tables['conversations'];
@@ -388,12 +416,12 @@ export type Database = {
 };
 
 // Função para criar o cliente do Supabase no lado do cliente
-export const createClientComponentClient = () => {
-  return createBrowserClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-};
+export const supabaseClient: SupabaseClient<Database> = createBrowserClient<Database>(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+export const createClientComponentClient = (): SupabaseClient<Database> => supabaseClient;
 
 // Função para criar o cliente do Supabase no lado do servidor (com cookies)
 // Nota: utilitário de servidor foi movido para '@/lib/supabaseServer'

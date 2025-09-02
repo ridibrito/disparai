@@ -1,29 +1,49 @@
-// TODO: Integrar componentes de assinatura quando a API estiver pronta
+import PricingPlans from '@/components/subscription/PricingPlans';
+import { createServerClient } from '@/lib/supabaseServer';
 
 export const metadata = {
-  title: 'Assinatura - Configurações - DisparaMaker',
+  title: 'Assinatura - Configurações - disparai',
   description: 'Gerencie seu plano e pagamentos',
 };
 
-export default function AssinaturaPage() {
+export default async function AssinaturaPage() {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: plans } = await supabase
+    .from('plans')
+    .select('id, name, price, features');
+
+  const { data: me } = await supabase
+    .from('users')
+    .select('plan_id')
+    .eq('id', user.id)
+    .single();
+
+  const normalized = (plans || []).map((p) => {
+    const f = (p.features as any) || {};
+    return {
+      id: p.id as unknown as string,
+      name: String(p.name),
+      description: '',
+      price: Number(p.price || 0),
+      interval: 'month' as const,
+      features: Object.keys(f).map((k) => `${k}: ${String(f[k])}`),
+      contactLimit: Number(f.contact_limit || 0),
+      deviceLimit: Number(f.dispositivos || 0),
+      campaignLimit: Number(f.campanhas_simultaneas || 0),
+    };
+  });
+
   return (
     <div className="space-y-6">
-      {/* Page Header */}
       <div className="mb-8 mt-4">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Assinatura</h1>
         <p className="text-gray-600">Gerencie seu plano atual e explore outras opções.</p>
       </div>
-
-      {/* Plano Atual */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Plano Atual</h2>
-        <p className="text-gray-600">Informações da assinatura estarão disponíveis em breve.</p>
-      </div>
-
-      {/* Planos Disponíveis */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Planos Disponíveis</h2>
-        <p className="text-gray-600">Seleção de planos será adicionada em breve.</p>
+        <PricingPlans plans={normalized as any} currentPlanId={me?.plan_id as any} />
       </div>
     </div>
   );

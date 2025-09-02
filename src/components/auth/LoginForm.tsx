@@ -55,7 +55,7 @@ export default function LoginForm() {
         <div className="flex justify-center mb-4">
           <Image
             src="/logo.png"
-            alt="DisparaMaker Logo"
+            alt="disparai Logo"
             width={200}
             height={60}
             className="h-12 w-auto"

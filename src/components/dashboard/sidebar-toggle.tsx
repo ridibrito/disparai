@@ -14,6 +14,7 @@ export function SidebarToggle() {
 
   const collapse = () => {
     document.documentElement.style.setProperty('--sidebar-width', '4rem');
+    document.documentElement.classList.add('sidebar-collapsed');
     document.querySelector('.dashboard-sidebar')?.classList.add('collapsed');
     document.querySelector('.dashboard-main')?.classList.add('expanded');
     document.querySelector('.dashboard-header')?.classList.add('expanded');
@@ -23,6 +24,7 @@ export function SidebarToggle() {
 
   const expand = () => {
     document.documentElement.style.setProperty('--sidebar-width', '16rem');
+    document.documentElement.classList.remove('sidebar-collapsed');
     document.querySelector('.dashboard-sidebar')?.classList.remove('collapsed');
     document.querySelector('.dashboard-main')?.classList.remove('expanded');
     document.querySelector('.dashboard-header')?.classList.remove('expanded');

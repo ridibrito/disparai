@@ -99,7 +99,33 @@ export default function PricingPlans({ plans, currentPlanId, onSelectPlan }: Pri
                 </button>
               ) : (
                 <button
-                  onClick={() => onSelectPlan?.(plan.id)}
+                  onClick={async () => {
+                    try {
+                      // Para Trial mantemos seleção direta; para planos pagos, abre checkout
+                      const isTrial = String(plan.name).toLowerCase().includes('trial');
+                      if (isTrial) {
+                        const res = await fetch('/api/plan/select', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ planId: plan.id }),
+                        });
+                        if (!res.ok) throw new Error('Falha ao atualizar plano');
+                        window.location.reload();
+                        return;
+                      }
+                      const res = await fetch('/api/billing/checkout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ planId: plan.id }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok || !data.url) throw new Error(data.error || 'Falha no checkout');
+                      window.location.href = data.url;
+                    } catch (e) {
+                      console.error(e);
+                      alert('Não foi possível iniciar o checkout.');
+                    }
+                  }}
                   className={`w-full py-2 px-4 rounded-md font-medium ${plan.highlighted ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-800 text-white hover:bg-gray-900'}`}
                 >
                   Selecionar Plano

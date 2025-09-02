@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Dispositivos - DisparaMaker',
+  title: 'Dispositivos - disparai',
 };
 
 export default function DispositivosPage() {

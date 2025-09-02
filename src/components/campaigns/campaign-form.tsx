@@ -38,9 +38,12 @@ const campaignFormSchema = z.object({
   message: z.string().min(5, {
     message: 'A mensagem deve ter pelo menos 5 caracteres',
   }),
-  api_credential_id: z.string().uuid({
-    message: 'Selecione uma credencial de API válida',
-  }),
+  // Permitir campanhas sem credencial (MVP/Sandbox) usando '' ou 'no-credentials'
+  api_credential_id: z
+    .string()
+    .uuid({ message: 'Selecione uma credencial de API válida' })
+    .or(z.literal(''))
+    .or(z.literal('no-credentials')),
   target_groups: z.array(z.string()).optional(),
   schedule: z.boolean().default(false),
   scheduled_at: z.string().optional(),
@@ -194,10 +197,10 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
     
     try {
       // Calcular o número de mensagens que serão enviadas
-      const messageCount = await calculateMessageCount(values.target_groups || []);
+      const toSendCount = await calculateMessageCount(values.target_groups || []);
       
-      if (messageCount + messageCount > messageLimit) {
-        toast.error(`Esta campanha enviará ${messageCount} mensagens, o que excede seu limite disponível.`);
+      if ((messageCount + toSendCount) > messageLimit) {
+        toast.error(`Esta campanha enviará ${toSendCount} mensagens, o que excede seu limite disponível.`);
         setIsLoading(false);
         return;
       }
@@ -207,7 +210,10 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
         user_id: userId,
         name: values.name,
         message: values.message,
-        api_credential_id: values.api_credential_id,
+        api_credential_id:
+          values.api_credential_id && values.api_credential_id !== 'no-credentials'
+            ? values.api_credential_id
+            : null,
         target_groups: values.target_groups || [],
         status: values.schedule ? 'scheduled' : 'draft',
         scheduled_at: values.schedule ? new Date(values.scheduled_at || '').toISOString() : null,
@@ -240,8 +246,38 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
         toast.success('Campanha criada com sucesso!');
       }
       
-      // Redirecionar para a página de detalhes da campanha
-      router.push(`/dashboard/campaigns/${campaignId}`);
+      // Criar mensagens pendentes para os contatos dos grupos selecionados
+      try {
+        if ((values.target_groups || []).length > 0) {
+          const { data: targetContacts, error: targetContactsError } = await supabase
+            .from('contacts')
+            .select('id')
+            .eq('user_id', userId)
+            .in('group', values.target_groups as string[]);
+
+          if (targetContactsError) throw targetContactsError;
+
+          const messagesToInsert = (targetContacts || []).map((c) => ({
+            campaign_id: campaignId,
+            contact_id: c.id,
+            status: 'pending' as const,
+          }));
+
+          if (messagesToInsert.length > 0) {
+            const { error: insertMessagesError } = await supabase
+              .from('campaign_messages')
+              .insert(messagesToInsert);
+
+            if (insertMessagesError) throw insertMessagesError;
+          }
+        }
+      } catch (messagesError) {
+        console.error('Erro ao criar mensagens da campanha:', messagesError);
+        toast.error('Campanha criada, mas houve erro ao gerar mensagens.');
+      }
+
+      // Redirecionar para a lista de disparos
+      router.push(`/disparos`);
       router.refresh();
     } catch (error) {
       console.error('Erro ao salvar campanha:', error);

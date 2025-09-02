@@ -1,25 +1,69 @@
 import PricingPlans from '@/components/subscription/PricingPlans';
 import { createServerClient } from '@/lib/supabaseServer';
+import Stripe from 'stripe';
 
 export const metadata = {
-  title: 'Planos - DisparaMaker',
+  title: 'Planos - disparai',
   description: 'Escolha ou altere seu plano de assinatura',
 };
 
 export default async function PlansPage() {
   const supabase = await createServerClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  const userId = session?.user?.id || '';
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return null;
+  }
 
-  // Planos estáticos de exemplo; integrar com tabela prices/products se necessário
-  const plans = [
-    { id: 'basic-month', name: 'Básico', description: 'Para começar', price: 29.9, interval: 'month', features: ['1 dispositivo', '2.000 contatos'], contactLimit: 2000, deviceLimit: 1, campaignLimit: 2 },
-    { id: 'pro-month', name: 'Pro', description: 'Para escalar', price: 99.9, interval: 'month', features: ['3 dispositivos', '20.000 contatos'], contactLimit: 20000, deviceLimit: 3, campaignLimit: 10, highlighted: true },
-    { id: 'business-month', name: 'Business', description: 'Alto volume', price: 299.9, interval: 'month', features: ['10 dispositivos', '100.000 contatos'], contactLimit: 100000, deviceLimit: 10, campaignLimit: 50 },
-    { id: 'basic-year', name: 'Básico', description: 'Para começar', price: 299.0, interval: 'year', features: ['1 dispositivo', '2.000 contatos'], contactLimit: 2000, deviceLimit: 1, campaignLimit: 2 },
-    { id: 'pro-year', name: 'Pro', description: 'Para escalar', price: 999.0, interval: 'year', features: ['3 dispositivos', '20.000 contatos'], contactLimit: 20000, deviceLimit: 3, campaignLimit: 10, highlighted: true },
-    { id: 'business-year', name: 'Business', description: 'Alto volume', price: 2999.0, interval: 'year', features: ['10 dispositivos', '100.000 contatos'], contactLimit: 100000, deviceLimit: 10, campaignLimit: 50 },
-  ];
+  const { data: plans, error: plansError } = await supabase
+    .from('plans')
+    .select('id, name, price, features');
+
+  const { data: userRow } = await supabase
+    .from('users')
+    .select('plan_id')
+    .eq('id', user.id)
+    .single();
+
+  // Buscar valores reais no Stripe para exibir preços corretos
+  const stripeSecret = process.env.STRIPE_SECRET_KEY;
+  const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: '2024-06-20' }) : null;
+
+  function priceIdForPlanByName(name: string): string | undefined {
+    const map: Record<string, string | undefined> = {
+      'Básico': process.env.BASIC_MONTH_PRICE_ID,
+      'Profissional': process.env.PRO_MONTH_PRICE_ID,
+      'Empresarial': process.env.BUSINESS_MONTH_PRICE_ID,
+      'Trial': process.env.TRIAL_PRICE_ID,
+    };
+    return map[name];
+  }
+
+  const normalized = await Promise.all((plans || []).map(async (p) => {
+    const features = (p.features as any) || {};
+    let priceNumber = Number(p.price || 0);
+    try {
+      const priceId = (features.stripe_price_id as string | undefined) || priceIdForPlanByName(String(p.name));
+      if (stripe && priceId) {
+        const price = await stripe.prices.retrieve(priceId);
+        if (typeof price.unit_amount === 'number') {
+          priceNumber = price.unit_amount / 100;
+        }
+      }
+    } catch (e) {
+      // fallback para preço do banco
+    }
+    return {
+      id: String(p.id),
+      name: String(p.name),
+      description: '',
+      price: priceNumber,
+      interval: 'month' as const,
+      features: Object.keys(features).map((k) => `${k}: ${String(features[k])}`),
+      contactLimit: Number((features as any).contact_limit || 0),
+      deviceLimit: Number((features as any).dispositivos || 0),
+      campaignLimit: Number((features as any).campanhas_simultaneas || 0),
+    } as any;
+  }));
 
   return (
     <div className="space-y-6">
@@ -28,7 +72,8 @@ export default async function PlansPage() {
         <p className="text-gray-600">Escolha o plano ideal para o seu negócio.</p>
       </div>
       <div className="bg-white rounded-lg shadow p-6">
-        <PricingPlans plans={plans as any} currentPlanId={undefined} />
+        <PricingPlans plans={normalized as any} currentPlanId={userRow?.plan_id as any} />
+        <form action="/api/billing/checkout" method="post" className="hidden" id="checkout-form"></form>
       </div>
     </div>
   );

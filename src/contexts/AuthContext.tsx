@@ -24,19 +24,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClientComponentClient();
 
   useEffect(() => {
-    const getSession = async () => {
+    const loadUser = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) {
+        console.warn('getUser error', error.message);
+      }
+      setUser(user ?? null);
+      // mantém sessão via getSession apenas para compatibilidade
       const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
+      setSession(session ?? null);
       setIsLoading(false);
     };
 
-    getSession();
+    loadUser();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session?.user?.email);
       setSession(session);
-      setUser(session?.user ?? null);
+      // busca usuário autenticado para evitar warning de integridade
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user ?? null);
       setIsLoading(false);
       
       // Redirecionar baseado no evento
@@ -96,10 +103,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
+      const baseUrl =
+        typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000');
       const { error, data } = await supabase.auth.signUp({
         email,
         password,
         options: {
+          emailRedirectTo: `${baseUrl}/verify`,
           data: {
             full_name: fullName,
           },
@@ -112,44 +122,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('Signup successful:', data.user?.email);
 
-      // Buscar o plano básico para associar ao novo usuário
-      const { data: basicPlan, error: planError } = await supabase
-        .from('plans')
-        .select('id')
-        .eq('name', 'Básico')
-        .single();
+      // Não inserir manualmente em public.users.
+      // O perfil é criado pelo trigger public.handle_new_user ao inserir em auth.users.
+      // O plano padrão será definido por trigger no banco (ou na primeira sessão) caso necessário.
 
-      if (planError) {
-        console.error('Erro ao buscar plano básico:', planError);
-        throw new Error('Não foi possível associar o usuário ao plano básico');
-      }
-
-      // Após o registro, inserir dados adicionais do usuário na tabela users
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert({
-            id: data.user.id,
-            email: data.user.email!,
-            full_name: fullName,
-            plan_id: basicPlan.id, // Associar ao plano básico
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-
-        if (profileError) {
-          console.error('Erro ao criar perfil:', profileError);
-          throw new Error('Erro ao criar perfil de usuário');
-        }
-      }
-
-      // Se a autenticação estiver configurada para confirmação por email
       if (data.session) {
-        // Se já temos uma sessão, redirecionar para o dashboard
         console.log('Usuário registrado com sessão, redirecionando...');
         router.replace('/dashboard');
       } else {
-        // Caso contrário, redirecionar para a página de verificação
         router.replace('/verify');
       }
     } catch (error) {

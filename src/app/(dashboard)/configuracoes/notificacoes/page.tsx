@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Notificações - DisparaMaker',
+  title: 'Notificações - disparai',
 };
 
 export default function NotificacoesPage() {

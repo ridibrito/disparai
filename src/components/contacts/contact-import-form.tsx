@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClientComponentClient } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,7 @@ import Papa from 'papaparse';
 type ContactImportFormProps = {
   userId: string;
   remainingContacts: number;
+  compact?: boolean;
 };
 
 type Contact = {
@@ -26,7 +27,7 @@ type Contact = {
   notes?: string;
 };
 
-export function ContactImportForm({ userId, remainingContacts }: ContactImportFormProps) {
+export function ContactImportForm({ userId, remainingContacts, compact = false }: ContactImportFormProps) {
   const router = useRouter();
   const supabase = createClientComponentClient<Database>();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,6 +39,48 @@ export function ContactImportForm({ userId, remainingContacts }: ContactImportFo
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [importStatus, setImportStatus] = useState<'idle' | 'preview' | 'importing' | 'success'>('idle');
+  
+  // Listas: permitir escolher lista alvo (ou nenhuma) e criar nova
+  const [lists, setLists] = useState<{ id: string; name: string }[]>([]);
+  const [targetListId, setTargetListId] = useState<string>('');
+  const [newListName, setNewListName] = useState<string>('');
+  
+  // Garante que exista a organização do usuário e retorna seu id
+  const ensureOrganization = async (): Promise<string> => {
+    const { data: org, error: selErr } = await supabase
+      .from('organizations' as any)
+      .select('id')
+      .eq('id', userId as any)
+      .maybeSingle();
+    if (!selErr && org?.id) return org.id as any;
+    const { data: inserted, error: insErr } = await supabase
+      .from('organizations' as any)
+      .insert({ id: userId as any, owner_id: userId as any, name: 'Conta' })
+      .select('id')
+      .single();
+    if (insErr) throw insErr;
+    return inserted.id as any;
+  };
+  
+  // Carregar listas do usuário
+  useEffect(() => {
+    const loadLists = async () => {
+      try {
+        const orgId = await ensureOrganization();
+        const { data, error } = await supabase
+          .from('contact_lists')
+          .select('id, name')
+          .eq('organization_id', orgId)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        setLists(data || []);
+      } catch (err) {
+        console.error('Erro ao carregar listas:', err);
+      }
+    };
+    loadLists();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   // Função para lidar com a seleção de arquivo
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -216,26 +259,68 @@ export function ContactImportForm({ userId, remainingContacts }: ContactImportFo
   const importContacts = async () => {
     try {
       setImportStatus('importing');
+      // Garantir organização do usuário
+      const orgId = await ensureOrganization();
+      // Resolver lista alvo (opcional)
+      let listId: string | null = null;
+      if (targetListId === 'new') {
+        if (!newListName.trim()) {
+          toast.error('Informe o nome da nova lista');
+          setImportStatus('preview');
+          return;
+        }
+        const { data: createdList, error: createErr } = await supabase
+          .from('contact_lists')
+          .insert({ user_id: userId, organization_id: orgId, name: newListName.trim() })
+          .select('id, name')
+          .single();
+        if (createErr) throw createErr;
+        listId = createdList!.id;
+        setLists((prev) => [{ id: createdList!.id, name: createdList!.name }, ...prev]);
+        setTargetListId(createdList!.id);
+        setNewListName('');
+      } else if (targetListId) {
+        listId = targetListId;
+      }
+
+      // Preparar dados para inserção (normalizando para schema atual)
+      const contactsToImport = contacts.map((contact) => {
+        const custom_fields: Record<string, any> = {};
+        if (contact.email) custom_fields.email = contact.email;
+        if (contact.group) custom_fields.group = contact.group;
+        if (contact.notes) custom_fields.notes = contact.notes;
+        return {
+          user_id: userId,
+          organization_id: orgId,
+          phone: contact.phone,
+          name: contact.name || null,
+          ...(Object.keys(custom_fields).length ? { custom_fields } : {}),
+        } as any;
+      });
       
-      // Preparar dados para inserção
-      const contactsToImport = contacts.map(contact => ({
-        ...contact,
-        user_id: userId,
-      }));
-      
-      // Inserir contatos no banco de dados
-      const { error } = await supabase
+      // Inserir contatos no banco de dados e retornar ids
+      const { data: inserted, error } = await supabase
         .from('contacts')
-        .insert(contactsToImport);
+        .insert(contactsToImport)
+        .select('id');
       
       if (error) throw error;
+      
+      // Se houver lista alvo, associar todos os contatos inseridos
+      if (listId && inserted && inserted.length > 0) {
+        const members = inserted.map((row: any) => ({ contact_id: row.id, list_id: listId }));
+        const { error: memberErr } = await supabase
+          .from('contact_list_members')
+          .upsert(members as any, { onConflict: 'contact_id,list_id', ignoreDuplicates: true } as any);
+        if (memberErr) throw memberErr;
+      }
       
       toast.success(`${contacts.length} contatos importados com sucesso!`);
       setImportStatus('success');
       
       // Redirecionar para a lista de contatos após 2 segundos
       setTimeout(() => {
-        router.push('/dashboard/contacts');
+        router.push('/contatos');
         router.refresh();
       }, 2000);
     } catch (error: any) {
@@ -258,12 +343,16 @@ export function ContactImportForm({ userId, remainingContacts }: ContactImportFo
     <div className="space-y-6">
       {importStatus === 'idle' && (
         <>
-          <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+          <div className={compact ? "bg-gray-50 border-2 border-dashed border-gray-300 rounded-md p-4 text-center" : "bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center"}>
             <Upload className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-lg font-medium">Arraste e solte seu arquivo aqui</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Ou clique para selecionar um arquivo CSV ou Excel (XLSX)
-            </p>
+            {!compact && (
+              <>
+                <h3 className="mt-2 text-lg font-medium">Arraste e solte seu arquivo aqui</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Ou clique para selecionar um arquivo CSV ou Excel (XLSX)
+                </p>
+              </>
+            )}
             <Input
               ref={fileInputRef}
               type="file"
@@ -275,25 +364,26 @@ export function ContactImportForm({ userId, remainingContacts }: ContactImportFo
             <Button
               onClick={() => fileInputRef.current?.click()}
               variant="outline"
-              className="mt-4"
+              className="mt-3"
               disabled={isUploading}
             >
               {isUploading ? 'Processando...' : 'Selecionar Arquivo'}
             </Button>
           </div>
-          
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex">
-              <FileText className="h-5 w-5 text-blue-500 mr-2" />
-              <div>
-                <h4 className="text-sm font-medium text-blue-800">Formato do arquivo</h4>
-                <p className="mt-1 text-sm text-blue-700">
-                  Seu arquivo deve conter as colunas: Nome e Telefone (obrigatórias), 
-                  Email, Grupo e Observações (opcionais).
-                </p>
+          {!compact && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex">
+                <FileText className="h-5 w-5 text-blue-500 mr-2" />
+                <div>
+                  <h4 className="text-sm font-medium text-blue-800">Formato do arquivo</h4>
+                  <p className="mt-1 text-sm text-blue-700">
+                    Seu arquivo deve conter as colunas: Nome e Telefone (obrigatórias), 
+                    Email, Grupo e Observações (opcionais).
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </>
       )}
       
@@ -308,7 +398,28 @@ export function ContactImportForm({ userId, remainingContacts }: ContactImportFo
                 {contacts.length} contatos encontrados no arquivo
               </p>
             </div>
-            <div className="flex space-x-2">
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <div className="flex gap-2 items-center">
+                <select
+                  value={targetListId}
+                  onChange={(e) => setTargetListId(e.target.value)}
+                  className="h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm"
+                >
+                  <option value="">Não adicionar a lista</option>
+                  {lists.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                  <option value="new">+ Criar nova lista…</option>
+                </select>
+                {targetListId === 'new' && (
+                  <Input
+                    placeholder="Nome da nova lista"
+                    value={newListName}
+                    onChange={(e) => setNewListName(e.target.value)}
+                    className="h-10"
+                  />
+                )}
+              </div>
               <Button variant="outline" onClick={cancelImport}>
                 Cancelar
               </Button>

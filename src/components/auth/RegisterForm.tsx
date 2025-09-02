@@ -54,7 +54,7 @@ export default function RegisterForm() {
         <div className="flex justify-center mb-4">
           <Image
             src="/logo.png"
-            alt="DisparaMaker Logo"
+            alt="disparai Logo"
             width={200}
             height={60}
             className="h-12 w-auto"
@@ -62,7 +62,7 @@ export default function RegisterForm() {
           />
         </div>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Criar Conta</h1>
-        <p className="text-gray-600">Registre-se para começar a usar o DisparaMaker</p>
+        <p className="text-gray-600">Registre-se para começar a usar o disparai</p>
       </div>
 
       {/* Error Message */}

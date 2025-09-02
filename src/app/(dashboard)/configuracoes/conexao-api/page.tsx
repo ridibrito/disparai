@@ -2,7 +2,7 @@ import { ApiCredentialsForm } from '@/components/api/api-credentials-form';
 import ApiCredentialsTable from '@/components/api/api-credentials-table';
 
 export const metadata = {
-  title: 'Conexão API - Configurações - DisparaMaker',
+  title: 'Conexão API - Configurações - disparai',
   description: 'Configure sua API do WhatsApp',
 };
 

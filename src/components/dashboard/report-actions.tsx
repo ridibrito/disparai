@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { Download, FileText } from 'lucide-react';
 
 type CampaignLite = {
@@ -50,24 +51,14 @@ export function ReportActions({ campaigns, contactsTotal, campaignsTotal, runnin
     window.print();
   };
 
-  return (
-    <div className="flex items-center gap-2">
-      <button
-        onClick={exportCsv}
-        className="inline-flex items-center px-3 py-2 text-sm bg-white border border-gray-200 rounded-md hover:bg-gray-50"
-        title="Exportar CSV"
-      >
-        <Download className="w-4 h-4 mr-2" /> Exportar CSV
-      </button>
-      <button
-        onClick={printReport}
-        className="inline-flex items-center px-3 py-2 text-sm bg-white border border-gray-200 rounded-md hover:bg-gray-50"
-        title="Imprimir"
-      >
-        <FileText className="w-4 h-4 mr-2" /> Imprimir
-      </button>
-    </div>
-  );
+  // Ouvir evento global do dropdown Exportar
+  useEffect(() => {
+    const onExport = () => exportCsv();
+    document.addEventListener('export-csv' as any, onExport);
+    return () => document.removeEventListener('export-csv' as any, onExport);
+  }, []);
+
+  return null;
 }
 
 

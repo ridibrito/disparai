@@ -3,7 +3,7 @@ interface PageProps {
 }
 
 export const metadata = {
-  title: 'Editar Contato - DisparaMaker',
+  title: 'Editar Contato - disparai',
 };
 
 export default function ContatosEditarPage({ params }: PageProps) {

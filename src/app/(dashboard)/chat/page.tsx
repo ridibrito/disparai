@@ -1,7 +1,7 @@
 import { MessageSquare, Send, Phone, Search, Paperclip, MoreVertical, Smile, Mic, CheckCheck } from 'lucide-react';
 
 export const metadata = {
-  title: 'Conversas - DisparaMaker',
+  title: 'Conversas - disparai',
   description: 'Lista de conversas estilo WhatsApp',
 };
 
@@ -25,8 +25,7 @@ export default function ChatPage() {
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
             <input
               placeholder="Pesquisar ou começar uma nova conversa"
-              className="w-full pl-8 pr-3 py-2 rounded-md text-sm bg-white border border-gray-300 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2"
-              style={{ '--tw-ring-color': '#4bca59' } as any }
+              className="w-full pl-8 pr-3 py-2 rounded-md text-sm bg-white border border-gray-300 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 ring-primary"
             />
           </div>
         </div>
@@ -77,21 +76,21 @@ export default function ChatPage() {
 
             {/* Mensagens */}
             <div className="flex-1 overflow-y-auto px-6 py-4 chat-bg">
-              <div className="space-y-2 min-x-7xl">
+              <div className="space-y-2 min-x-2xl">
                 <div className="flex justify-start">
-                  <div className="bg-white border border-gray-200 text-gray-800 rounded-lg rounded-tl-none px-3 py-2 max-w-[75%]">
+                  <div className="bg-white border border-gray-200 text-gray-800 rounded-lg rounded-tl-none px-3 py-2 max-w-[75%] bubble-in">
                     <p className="text-sm">Oi paaaai</p>
                     <div className="flex items-center justify-end mt-1 gap-1 text-[10px] text-gray-500"><span>09:55</span></div>
                   </div>
                 </div>
                 <div className="flex justify-start">
-                  <div className="bg-white border border-gray-200 text-gray-800 rounded-lg rounded-tl-none px-3 py-2 max-w-[75%]">
+                  <div className="bg-white border border-gray-200 text-gray-800 rounded-lg rounded-tl-none px-3 py-2 max-w-[75%] bubble-in">
                     <p className="text-sm">Tudo bem? Podemos conversar?</p>
                     <div className="flex items-center justify-end mt-1 gap-1 text-[10px] text-gray-500"><span>09:56</span></div>
                   </div>
                 </div>
                 <div className="flex justify-end">
-                  <div className="bg-[#4bca59] text-white rounded-lg rounded-tr-none px-3 py-2 max-w-[75%] shadow">
+                  <div className="bg-[#4bca59] text-white rounded-lg rounded-tr-none px-3 py-2 max-w-[75%] shadow bubble-out">
                     <p className="text-sm">Bom diaaa, tudo bem e vc? Podemos sim!</p>
                     <div className="flex items-center justify-end mt-1 gap-1 text-[10px] opacity-80"><span>09:57</span><CheckCheck className="w-3 h-3" /></div>
                   </div>
@@ -101,14 +100,13 @@ export default function ChatPage() {
 
             {/* Input */}
             <div className="px-4 py-3 bg-white border-t border-gray-200">
-              <div className="min-w-7xl flex items-center gap-3">
+              <div className="min-w-2xl flex items-center gap-3">
                 <button className="text-gray-500 hover:text-gray-700"><Smile className="w-5 h-5" /></button>
                 <button className="text-gray-500 hover:text-gray-700"><Paperclip className="w-5 h-5" /></button>
                 <input
                   type="text"
                   placeholder="Digite uma mensagem"
-                  className="flex-1 bg-white border border-gray-300 text-gray-900 placeholder-gray-500 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2"
-                  style={{ '--tw-ring-color': '#4bca59' } as any }
+                  className="flex-1 bg-white border border-gray-300 text-gray-900 placeholder-gray-500 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 ring-primary"
                 />
                 <button className="text-white bg-[#25D366] hover:bg-[#1fc15d] rounded-full w-9 h-9 flex items-center justify-center">
                   <Mic className="w-4 h-4" />

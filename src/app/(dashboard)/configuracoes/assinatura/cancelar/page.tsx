@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Cancelar Assinatura - DisparaMaker',
+  title: 'Cancelar Assinatura - disparai',
 };
 
 export default function CancelarAssinaturaPage() {

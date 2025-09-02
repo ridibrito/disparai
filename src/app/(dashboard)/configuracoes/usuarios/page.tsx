@@ -2,7 +2,7 @@ import { createServerClient } from '@/lib/supabaseServer';
 import { MembersTable } from '@/components/organization/members-table';
 
 export const metadata = {
-  title: 'Usuários - Configurações - DisparaMaker',
+  title: 'Usuários - Configurações - disparai',
   description: 'Gerencie os membros da organização',
 };
 

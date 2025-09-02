@@ -5,6 +5,7 @@ import { createServerClient } from '@/lib/supabaseServer';
 import { Settings, Home, Users, MessageSquare, Zap } from 'lucide-react';
 import { SidebarToggle } from '@/components/dashboard/sidebar-toggle';
 import { UserDropdown } from '@/components/ui/user-dropdown';
+import { SidebarLink } from '@/components/dashboard/sidebar-link';
 
 export default async function DashboardLayout({
   children,
@@ -19,14 +20,51 @@ export default async function DashboardLayout({
   
   // Obter dados do usuário
   let userName = 'Usuário';
+  let avatarUrl: string | null = null;
   if (user?.id) {
     const { data: userData } = await supabase
       .from('users')
-      .select('full_name')
+      .select('full_name, avatar_url')
       .eq('id', user.id)
       .single();
     
-    userName = (userData as { full_name?: string })?.full_name || user.email || 'Usuário';
+    userName = ((userData as unknown as { full_name?: string } | null)?.full_name) || user.email || 'Usuário';
+    avatarUrl = (userData as unknown as { avatar_url?: string | null } | null)?.avatar_url ?? null;
+  }
+
+  // Obter status de trial da organização (id == user.id no seed/trigger)
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('trial_starts_at, trial_ends_at, trial_status, created_at')
+    .eq('id', user.id)
+    .single();
+
+  let trialBanner: React.ReactNode = null;
+  if (org) {
+    let days = 0;
+    if (org.trial_status === 'active') {
+      if (org.trial_ends_at) {
+        const ends = new Date(org.trial_ends_at as unknown as string);
+        const now = new Date();
+        const diffMs = ends.getTime() - now.getTime();
+        days = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+      } else if (org.created_at) {
+        // Fallback: se não há trial_ends_at, considerar 3 dias a partir da criação
+        const created = new Date(org.created_at as unknown as string);
+        const ends = new Date(created.getTime() + 3 * 24 * 60 * 60 * 1000);
+        const now = new Date();
+        const diffMs = ends.getTime() - now.getTime();
+        days = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+      }
+    }
+    if (days > 0) {
+      trialBanner = (
+        <div className="mb-4 rounded-md border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+          Seu período de teste termina em <strong>{days} {days === 1 ? 'dia' : 'dias'}</strong>.{' '}
+          <a href="/configuracoes/assinatura" className="underline">Ative um plano</a> para não interromper o serviço.
+        </div>
+      );
+    }
   }
   
   return (
@@ -39,10 +77,10 @@ export default async function DashboardLayout({
             <div className="flex items-center">
               <Image
                 src="/logo.png"
-                alt="DisparaMaker Logo"
+                alt="disparai Logo"
                 width={180}
                 height={40}
-                className="h-8 w-auto logo-full"
+                className="h-6 w-auto logo-full"
                 priority
               />
             </div>
@@ -53,58 +91,38 @@ export default async function DashboardLayout({
           <nav className="flex-1 px-4 py-6">
             <ul className="space-y-2">
               <li>
-                <Link 
-                  href="/dashboard" 
-                  className="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100 transition-colors group sidebar-link"
-                  title="Início"
-                >
+                <SidebarLink href="/dashboard" title="Início">
                   <Home className="w-5 h-5 mr-3 group-hover:text-green-600" />
                   <span className="sidebar-label">Início</span>
-                </Link>
+                </SidebarLink>
               </li>
               <li>
-                <Link 
-                  href="/disparos" 
-                  className="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100 transition-colors group sidebar-link"
-                  title="Disparos"
-                >
-                  <Zap className="w-5 h-5 mr-3 group-hover:text-green-600" />
+                <SidebarLink href="/disparos" title="Disparos">
+                  <Zap className="w-5 h-5 mr-3 text-[#4bca59]" />
                   <span className="sidebar-label">Disparos</span>
-                </Link>
+                </SidebarLink>
               </li>
               <li>
-                <Link 
-                  href="/contatos" 
-                  className="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100 transition-colors group sidebar-link"
-                  title="Contatos"
-                >
+                <SidebarLink href="/contatos" title="Contatos">
                   <Users className="w-5 h-5 mr-3 group-hover:text-green-600" />
                   <span className="sidebar-label">Contatos</span>
-                </Link>
+                </SidebarLink>
               </li>
               <li>
-                <Link 
-                  href="/conversas" 
-                  className="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100 transition-colors group sidebar-link"
-                  title="Conversas"
-                >
+                <SidebarLink href="/conversas" title="Conversas">
                   <MessageSquare className="w-5 h-5 mr-3 group-hover:text-green-600" />
                   <span className="sidebar-label">Conversas</span>
-                </Link>
+                </SidebarLink>
               </li>
             </ul>
           </nav>
           
           {/* Footer - Configurações */}
           <div className="p-4 border-t border-gray-200">
-            <Link 
-              href="/configuracoes" 
-              className="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100 transition-colors group sidebar-link"
-              title="Configurações"
-            >
+            <SidebarLink href="/configuracoes" title="Configurações">
               <Settings className="w-5 h-5 mr-3 group-hover:text-green-600" />
               <span className="sidebar-label">Configurações</span>
-            </Link>
+            </SidebarLink>
           </div>
         </div>
       </div>
@@ -117,12 +135,14 @@ export default async function DashboardLayout({
             <UserDropdown 
               userName={userName}
               userInitial={userName?.charAt(0).toUpperCase()}
+              avatarUrl={avatarUrl}
             />
           </div>
         </header>
         
         {/* Page Content */}
         <main className="dashboard-content">
+          {trialBanner}
           {children}
         </main>
       </div>

@@ -2,7 +2,7 @@ import { CampaignForm } from '@/components/campaigns/campaign-form';
 import { createServerClient } from '@/lib/supabaseServer';
 
 export const metadata = {
-  title: 'Novo Disparo - DisparaMaker',
+  title: 'Novo Disparo - disparai',
   description: 'Crie um novo disparo de mensagens',
 };
 

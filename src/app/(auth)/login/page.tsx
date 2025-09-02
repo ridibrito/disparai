@@ -1,8 +1,8 @@
 import LoginForm from '@/components/auth/LoginForm';
 
 export const metadata = {
-  title: 'Login - DisparaMaker',
-  description: 'Faça login na sua conta DisparaMaker',
+  title: 'Login - disparai',
+  description: 'Faça login na sua conta disparai',
 };
 
 export default function LoginPage() {

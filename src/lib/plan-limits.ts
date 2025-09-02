@@ -25,7 +25,7 @@ export async function checkContactLimit(userId: string) {
     .select('id', { count: 'exact', head: true })
     .eq('user_id', userId);
   
-  const contactLimit = user.plans.contact_limit;
+  const contactLimit = user.plans.contact_limit || (user.plans.features?.trial ? 100 : 0);
   const currentCount = count || 0;
   
   return {
@@ -69,7 +69,7 @@ export async function checkMessageLimit(userId: string) {
     .gte('created_at', firstDayOfMonth)
     .lte('created_at', lastDayOfMonth);
   
-  const messageLimit = user.plans.message_limit;
+  const messageLimit = user.plans.message_limit || (user.plans.features?.trial ? 500 : 0);
   const currentCount = count || 0;
   
   return {
@@ -138,7 +138,7 @@ export async function checkDeviceLimit(userId: string) {
     .select('id', { count: 'exact', head: true })
     .eq('user_id', userId);
   
-  const deviceLimit = user.plans.features.dispositivos || 1;
+  const deviceLimit = (user.plans.features?.dispositivos ?? (user.plans.features?.trial ? 1 : 1));
   const currentCount = count || 0;
   
   return {

@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Conversas - DisparaMaker',
+  title: 'Conversas - disparai',
 };
 
 export { default } from '../chat/page';

@@ -3,17 +3,19 @@ import { PlanSummary as DashboardPlanSummary } from '@/components/dashboard/plan
 import { ReportActions } from '@/components/dashboard/report-actions';
 import { QuickActions } from '@/components/dashboard/quick-actions';
 import { Users, Layers, Clock, AlertTriangle, MessageCircle, UserPlus } from 'lucide-react';
+import { PeriodFilter } from '@/components/dashboard/period-filter';
+import { cookies } from 'next/headers';
 
 export const metadata = {
-  title: 'Dashboard - DisparaMaker',
+  title: 'Dashboard - disparai',
   description: 'Gerencie suas campanhas e mensagens de WhatsApp',
 };
 
 export default async function Dashboard() {
   const supabase = await createServerClient();
   
-  // Verificar se o usuário está autenticado
-  const { data: { session } } = await supabase.auth.getSession();
+  // Verificar se o usuário está autenticado (forma segura)
+  const { data: { user } } = await supabase.auth.getUser();
   
   // Se não estiver autenticado, redirecionar para a página de login
   // if (!session) {
@@ -21,10 +23,29 @@ export default async function Dashboard() {
   // }
   
   // Métricas
-  const userId = session?.user?.id || '';
+  const userId = user?.id || '';
   // Em multi-tenant, usamos a organização atual = id do usuário (seed) por enquanto
   const currentOrgId = userId;
-  const since7d = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+  // Filtro por período via query string
+  const searchParams = new URLSearchParams(cookies().get('next-url-qs')?.value || '');
+  const range = searchParams.get('range') || '7d';
+  let fromISO: string | null = null;
+  let toISO: string | null = null;
+  const now = new Date();
+  if (range === '7d') {
+    fromISO = new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString();
+  } else if (range === 'month') {
+    const d = new Date(now.getFullYear(), now.getMonth(), 1);
+    fromISO = d.toISOString();
+  } else if (range === 'year') {
+    const d = new Date(now.getFullYear(), 0, 1);
+    fromISO = d.toISOString();
+  } else if (range === 'custom') {
+    const from = searchParams.get('from');
+    const to = searchParams.get('to');
+    if (from) fromISO = new Date(from).toISOString();
+    if (to) toISO = new Date(new Date(to).getTime() + 24 * 3600 * 1000 - 1).toISOString();
+  }
   const [
     { count: contactsCount },
     { count: campaignsCount },
@@ -33,12 +54,22 @@ export default async function Dashboard() {
     { count: activeChatsCount },
     { count: leads7dCount },
   ] = await Promise.all([
-    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId),
-    supabase.from('campaigns').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId),
-    supabase.from('campaigns').select('id, name, status, created_at').eq('organization_id', currentOrgId).order('created_at', { ascending: false }).limit(5),
-    supabase.from('campaigns').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId).eq('status', 'failed'),
+    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId)
+      .gte(fromISO ? 'created_at' : 'id', fromISO || undefined as any)
+      .lte(toISO ? 'created_at' : 'id', toISO || undefined as any),
+    supabase.from('campaigns').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId)
+      .gte(fromISO ? 'created_at' : 'id', fromISO || undefined as any)
+      .lte(toISO ? 'created_at' : 'id', toISO || undefined as any),
+    supabase.from('campaigns').select('id, name, status, created_at').eq('organization_id', currentOrgId)
+      .gte(fromISO ? 'created_at' : 'id', fromISO || undefined as any)
+      .lte(toISO ? 'created_at' : 'id', toISO || undefined as any)
+      .order('created_at', { ascending: false }).limit(5),
+    supabase.from('campaigns').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId).eq('status', 'failed')
+      .gte(fromISO ? 'created_at' : 'id', fromISO || undefined as any)
+      .lte(toISO ? 'created_at' : 'id', toISO || undefined as any),
     supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId).eq('status', 'active'),
-    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId).gte('created_at', since7d),
+    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId)
+      .gte('created_at', new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString()),
   ]);
 
   const runningCount = (recentCampaignsRaw || []).filter((c: any) => c.status === 'running').length;
@@ -51,7 +82,8 @@ export default async function Dashboard() {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
           <p className="text-gray-600">Resumo de contatos, campanhas e atividades recentes.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <PeriodFilter />
           <QuickActions />
           <ReportActions 
             campaigns={(recentCampaignsRaw as any) || []}
@@ -133,7 +165,7 @@ export default async function Dashboard() {
       
       {/* Plan Summary */}
       <div>
-        {session?.user?.id && <DashboardPlanSummary userId={session.user.id} />}
+        {user?.id && <DashboardPlanSummary userId={user.id} />}
       </div>
       
       {/* Recent Campaigns */}

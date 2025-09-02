@@ -2,7 +2,7 @@ import { ProfileForm } from '@/components/profile/profile-form';
 import { createServerClient } from '@/lib/supabaseServer';
 
 export const metadata = {
-  title: 'Perfil - Configurações - DisparaMaker',
+  title: 'Perfil - Configurações - disparai',
   description: 'Gerencie suas informações pessoais',
 };
 
@@ -11,7 +11,11 @@ export default async function PerfilPage() {
   const { data: { session } } = await supabase.auth.getSession();
   const userId = session?.user?.id || '';
   const userEmail = session?.user?.email || '';
-  const { data: initial } = await supabase.from('users').select('full_name').eq('id', userId).single();
+  const { data: initial } = await supabase
+    .from('users')
+    .select('full_name, avatar_url, bio, phone')
+    .eq('id', userId)
+    .single();
 
   return (
     <div className="space-y-6">

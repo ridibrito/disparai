@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Settings, User, CreditCard, Wifi, Shield, Bell, Download, Users } from 'lucide-react';
 
 export const metadata = {
-  title: 'Configurações - DisparaMaker',
+  title: 'Configurações - disparai',
   description: 'Configure sua conta e preferências',
 };
 
