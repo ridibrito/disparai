@@ -9,9 +9,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'react-hot-toast';
 import { Database } from '@/lib/supabase';
-import { Upload, FileText, AlertCircle, Check } from 'lucide-react';
+import { Upload, FileText, AlertCircle, Check, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
+import { useImport } from '@/contexts/import-context';
+import { DuplicateResolutionModal } from './duplicate-resolution-modal';
+import { useDuplicateDetection } from '@/hooks/use-duplicate-detection';
 
 type ContactImportFormProps = {
   userId: string;
@@ -31,6 +34,8 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
   const router = useRouter();
   const supabase = createClientComponentClient<Database>();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cancelRef = useRef(false);
+  const { startImport, updateProgress, completeImport, cancelImport: cancelImportGlobal } = useImport();
   
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -39,6 +44,69 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [importStatus, setImportStatus] = useState<'idle' | 'preview' | 'importing' | 'success'>('idle');
+  
+  // Estados para progresso e feedback
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [processingStep, setProcessingStep] = useState('');
+  const [totalRows, setTotalRows] = useState(0);
+  const [processedRows, setProcessedRows] = useState(0);
+  const [canCancel, setCanCancel] = useState(false);
+  
+  // Estados para duplicados
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const { duplicates, hasDuplicates, duplicateStats, resolveDuplicates } = useDuplicateDetection(contacts);
+  
+  // Verificação periódica em background (sem interface visual)
+  useEffect(() => {
+    if (!contacts.length) return;
+    
+    // Verificar duplicados a cada 15 minutos durante importação
+    const interval = setInterval(() => {
+      if (hasDuplicates && duplicateStats) {
+        console.log(`🔍 [${new Date().toLocaleTimeString()}] Verificação periódica durante importação: ${duplicates.length} grupos de duplicados encontrados`);
+        
+        // Mostrar toast amarelo informativo
+        toast(
+          (t) => (
+            <div className="flex items-start gap-3">
+              <div className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0">⚠️</div>
+              <div className="flex-1">
+                <div className="font-medium text-yellow-800 mb-1">
+                  Duplicados detectados!
+                </div>
+                <div className="text-sm text-yellow-700 mb-2">
+                  {duplicateStats.uniquePhones} telefones com múltiplos contatos 
+                  ({duplicateStats.totalDuplicates} contatos duplicados)
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    toast.dismiss(t.id);
+                    setShowDuplicateModal(true);
+                  }}
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white text-xs"
+                >
+                  Resolver Duplicados
+                </Button>
+              </div>
+            </div>
+          ),
+          {
+            duration: 10000,
+            icon: null,
+            style: {
+              background: '#fefce8',
+              border: '1px solid #fbbf24',
+              color: '#92400e'
+            }
+          }
+        );
+      }
+    }, 15 * 60 * 1000); // 15 minutos
+    
+    // Cleanup
+    return () => clearInterval(interval);
+  }, [contacts.length, hasDuplicates, duplicates, duplicateStats]);
   
   // Listas: permitir escolher lista alvo (ou nenhuma) e criar nova
   const [lists, setLists] = useState<{ id: string; name: string }[]>([]);
@@ -81,24 +149,44 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
     loadLists();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  
+
+  // Função para cancelar o processamento
+  const handleCancelProcessing = () => {
+    cancelRef.current = true;
+    setCanCancel(false);
+    setProcessingStep('Cancelando...');
+    
+    // Cancelar importação global
+    cancelImportGlobal();
+  };
+
   // Função para lidar com a seleção de arquivo
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('handleFileSelect chamado');
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      console.log('Nenhum arquivo selecionado');
+      return;
+    }
     
+    console.log('Arquivo selecionado:', file.name, file.type, file.size);
     setSelectedFile(file);
     setIsUploading(true);
     
     // Determinar o tipo de arquivo
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    console.log('Extensão do arquivo:', fileExtension);
+    
     if (fileExtension === 'csv') {
+      console.log('Processando arquivo CSV...');
       setFileType('csv');
       parseCSV(file);
     } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+      console.log('Processando arquivo Excel...');
       setFileType('xlsx');
       parseExcel(file);
     } else {
+      console.log('Formato não suportado:', fileExtension);
       toast.error('Formato de arquivo não suportado. Use CSV ou XLSX.');
       setIsUploading(false);
       setSelectedFile(null);
@@ -146,7 +234,50 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
   
   // Função para processar os dados importados
   const processImportedData = (data: any[]) => {
+    console.log('Dados brutos recebidos:', data);
+    console.log('Número de linhas:', data.length);
+    
+    // Verificar se os cabeçalhos estão corretos
+    if (data.length > 0) {
+      const firstRow = data[0];
+      const availableHeaders = Object.keys(firstRow);
+      const hasName = availableHeaders.some(h => 
+        ['name', 'nome', 'fullname', 'full name', 'nome completo'].includes(h.toLowerCase())
+      );
+      const hasPhone = availableHeaders.some(h => 
+        ['phone', 'telefone', 'celular', 'mobile', 'whatsapp', 'número', 'number'].includes(h.toLowerCase())
+      );
+      
+      if (!hasName || !hasPhone) {
+        const missingFields = [];
+        if (!hasName) missingFields.push('nome');
+        if (!hasPhone) missingFields.push('telefone');
+        
+        toast.error(`Cabeçalhos necessários não encontrados: ${missingFields.join(', ')}. 
+          Use: 'nome' ou 'name' para o nome, 'telefone' ou 'phone' para o telefone. 
+          Cabeçalhos disponíveis: ${availableHeaders.join(', ')}`);
+        
+        setIsProcessing(false);
+        setCanCancel(false);
+        setProcessingProgress(0);
+        setProcessingStep('');
+        setSelectedFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+    }
+    
+    // Após validação dos cabeçalhos, iniciar processamento visual
     setIsProcessing(true);
+    setCanCancel(true);
+    setTotalRows(data.length);
+    setProcessedRows(0);
+    setProcessingStep('Processando contatos...');
+    setProcessingProgress(0);
+    
+    // Iniciar importação global para barra flutuante
+    startImport(selectedFile?.name || 'Arquivo', data.length);
+    
     const errors: string[] = [];
     const processedContacts: Contact[] = [];
     
@@ -162,17 +293,19 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
     // Função para encontrar a chave correspondente nos dados
     const findKey = (obj: any, fieldMappings: string[]): string | undefined => {
       const keys = Object.keys(obj).map(k => k.toLowerCase());
+      
       for (const mapping of fieldMappings) {
         const matchedKey = keys.find(k => k === mapping.toLowerCase());
         if (matchedKey) {
-          return Object.keys(obj).find(k => k.toLowerCase() === matchedKey);
+          const originalKey = Object.keys(obj).find(k => k.toLowerCase() === matchedKey);
+          return originalKey;
         }
       }
       return undefined;
     };
     
-    // Processar cada linha
-    data.forEach((row, index) => {
+    // Função para processar uma linha
+    const processRow = (row: any, index: number): Contact | null => {
       try {
         // Encontrar as chaves correspondentes
         const nameKey = findKey(row, headerMappings.name);
@@ -184,12 +317,12 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
         // Verificar campos obrigatórios
         if (!nameKey || !row[nameKey]) {
           errors.push(`Linha ${index + 1}: Nome não encontrado ou vazio`);
-          return;
+          return null;
         }
         
         if (!phoneKey || !row[phoneKey]) {
           errors.push(`Linha ${index + 1}: Telefone não encontrado ou vazio`);
-          return;
+          return null;
         }
         
         // Formatar o telefone
@@ -201,7 +334,7 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
         // Validar formato do telefone
         if (!/^\+?[0-9]+$/.test(phone)) {
           errors.push(`Linha ${index + 1}: Formato de telefone inválido: ${phone}`);
-          return;
+          return null;
         }
         
         // Criar objeto de contato
@@ -228,31 +361,103 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
           contact.notes = String(row[notesKey]);
         }
         
-        processedContacts.push(contact);
+        return contact;
       } catch (error) {
         console.error(`Erro ao processar linha ${index + 1}:`, error);
         errors.push(`Erro ao processar linha ${index + 1}: ${(error as Error).message}`);
+        return null;
       }
-    });
+    };
     
-    // Verificar se há contatos válidos
-    if (processedContacts.length === 0) {
-      toast.error('Nenhum contato válido encontrado no arquivo.');
-      setIsProcessing(false);
-      setSelectedFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
-    }
+    // Processar em chunks para não bloquear a UI
+    const processChunk = (startIndex: number, chunkSize: number = 100) => {
+      const endIndex = Math.min(startIndex + chunkSize, data.length);
+      
+      for (let i = startIndex; i < endIndex; i++) {
+        const contact = processRow(data[i], i);
+        if (contact) {
+          processedContacts.push(contact);
+        }
+      }
+      
+      // Atualizar progresso real
+      const progress = Math.round((endIndex / data.length) * 100);
+      setProcessingProgress(progress);
+      setProcessedRows(endIndex);
+      setProcessingStep(`Processando linha ${endIndex} de ${data.length}...`);
+      
+      // Atualizar progresso global para barra flutuante
+      updateProgress(progress, `Processando linha ${endIndex} de ${data.length}...`, endIndex);
+      
+      // Se ainda há mais linhas para processar
+      if (endIndex < data.length) {
+        // Usar setTimeout para não bloquear a UI e permitir navegação
+        setTimeout(() => {
+          if (cancelRef.current) {
+            console.log('Processamento cancelado pelo usuário');
+            setIsProcessing(false);
+            setCanCancel(false);
+            setProcessingProgress(0);
+            setProcessingStep('');
+            return;
+          }
+          processChunk(endIndex, chunkSize);
+        }, 10); // Pequeno delay para não sobrecarregar
+      } else {
+        // Processamento concluído
+        
+        // Verificar se há contatos válidos
+        if (processedContacts.length === 0) {
+          setProcessingStep('Nenhum contato válido encontrado');
+          setProcessingProgress(100);
+          setTimeout(() => {
+            toast.error('Nenhum contato válido encontrado no arquivo.');
+            setIsProcessing(false);
+            setCanCancel(false);
+            setProcessingProgress(0);
+            setProcessingStep('');
+            setSelectedFile(null);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          }, 1000);
+          return;
+        }
+        
+        // Verificar limite de contatos
+        if (processedContacts.length > remainingContacts) {
+          errors.push(`O arquivo contém ${processedContacts.length} contatos, mas você só pode importar ${remainingContacts} contatos adicionais.`);
+        }
+        
+        setProcessingStep('Processamento concluído!');
+        setProcessingProgress(100);
+        
+        setTimeout(() => {
+          const contactsToShow = processedContacts.slice(0, remainingContacts);
+          setContacts(contactsToShow);
+          setValidationErrors(errors);
+          
+          // Se há duplicados, mostrar toast informativo
+          if (duplicates.length > 0) {
+            const totalDuplicates = duplicates.reduce((sum, group) => sum + group.contacts.length, 0);
+            toast.success(
+              `${contactsToShow.length} contatos processados! ${duplicates.length} grupos de duplicados encontrados (${totalDuplicates} contatos duplicados). Clique em "Resolver Duplicados" para continuar.`,
+              { duration: 8000 }
+            );
+          }
+          
+          setImportStatus('preview');
+          setIsProcessing(false);
+          setCanCancel(false);
+          setProcessingProgress(0);
+          setProcessingStep('');
+          
+          // Concluir importação global
+          completeImport();
+        }, 1000);
+      }
+    };
     
-    // Verificar limite de contatos
-    if (processedContacts.length > remainingContacts) {
-      errors.push(`O arquivo contém ${processedContacts.length} contatos, mas você só pode importar ${remainingContacts} contatos adicionais.`);
-    }
-    
-    setContacts(processedContacts.slice(0, remainingContacts));
-    setValidationErrors(errors);
-    setImportStatus('preview');
-    setIsProcessing(false);
+    // Iniciar processamento em chunks imediatamente
+    processChunk(0, 100); // Processar 100 linhas por vez
   };
   
   // Função para importar contatos
@@ -343,16 +548,7 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
     <div className="space-y-6">
       {importStatus === 'idle' && (
         <>
-          <div className={compact ? "bg-gray-50 border-2 border-dashed border-gray-300 rounded-md p-4 text-center" : "bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center"}>
-            <Upload className="mx-auto h-12 w-12 text-gray-400" />
-            {!compact && (
-              <>
-                <h3 className="mt-2 text-lg font-medium">Arraste e solte seu arquivo aqui</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Ou clique para selecionar um arquivo CSV ou Excel (XLSX)
-                </p>
-              </>
-            )}
+          <div className="flex items-center gap-2">
             <Input
               ref={fileInputRef}
               type="file"
@@ -364,10 +560,11 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
             <Button
               onClick={() => fileInputRef.current?.click()}
               variant="outline"
-              className="mt-3"
+              className="inline-flex items-center h-11 px-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-primary-light)]"
               disabled={isUploading}
             >
-              {isUploading ? 'Processando...' : 'Selecionar Arquivo'}
+              <Upload className="h-4 w-4 mr-2" />
+              {isUploading ? 'Processando...' : 'Importar Contatos'}
             </Button>
           </div>
           {!compact && (
@@ -377,14 +574,59 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
                 <div>
                   <h4 className="text-sm font-medium text-blue-800">Formato do arquivo</h4>
                   <p className="mt-1 text-sm text-blue-700">
-                    Seu arquivo deve conter as colunas: Nome e Telefone (obrigatórias), 
-                    Email, Grupo e Observações (opcionais).
+                    <strong>Cabeçalhos obrigatórios:</strong> Nome (ou "name") e Telefone (ou "phone")
+                  </p>
+                  <p className="mt-1 text-sm text-blue-700">
+                    <strong>Cabeçalhos opcionais:</strong> Email, Grupo, Observações
+                  </p>
+                  <p className="mt-2 text-xs text-blue-600">
+                    Exemplos de cabeçalhos válidos: "Nome", "name", "Telefone", "phone", "telefone", "celular"
                   </p>
                 </div>
               </div>
             </div>
           )}
         </>
+      )}
+      
+      {isProcessing && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <h3 className="text-lg font-medium text-blue-800 mb-2">
+              Processando arquivo...
+            </h3>
+            <p className="text-sm text-blue-700 mb-4">
+              {processingStep}
+            </p>
+            
+            {/* Barra de progresso */}
+            <div className="w-full bg-blue-200 rounded-full h-3 mb-4">
+              <div 
+                className="bg-blue-600 h-3 rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${processingProgress}%` }}
+              ></div>
+            </div>
+            
+            {/* Contador de progresso */}
+            <div className="flex justify-between text-xs text-blue-600 mb-4">
+              <span>Linha {processedRows} de {totalRows}</span>
+              <span>{processingProgress}%</span>
+            </div>
+            
+            {/* Botão de cancelar */}
+            {canCancel && (
+              <Button
+                onClick={handleCancelProcessing}
+                variant="outline"
+                size="sm"
+                className="border-red-300 text-red-600 hover:bg-red-50"
+              >
+                Cancelar Processamento
+              </Button>
+            )}
+          </div>
+        </div>
       )}
       
       {importStatus === 'preview' && (
@@ -396,9 +638,26 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
               </h3>
               <p className="text-sm text-gray-500">
                 {contacts.length} contatos encontrados no arquivo
+                {duplicates.length > 0 && (
+                  <span className="ml-2 text-orange-600 font-medium">
+                    • {duplicates.length} grupos de duplicados detectados
+                  </span>
+                )}
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              {/* Botão Resolver Duplicados */}
+              {duplicates.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDuplicateModal(true)}
+                  className="border-orange-300 text-orange-600 hover:bg-orange-50"
+                >
+                  <AlertTriangle className="h-4 w-4 mr-2" />
+                  Resolver Duplicados ({duplicates.length})
+                </Button>
+              )}
+              
               <div className="flex gap-2 items-center">
                 <select
                   value={targetListId}
@@ -502,6 +761,35 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
             {contacts.length} contatos foram importados. Redirecionando...
           </p>
         </div>
+      )}
+
+      {showDuplicateModal && (
+        <DuplicateResolutionModal
+          isOpen={showDuplicateModal}
+          duplicates={duplicates}
+          onClose={() => setShowDuplicateModal(false)}
+          onResolve={(resolvedContacts) => {
+            // Atualizar a lista de contatos removendo os duplicados não selecionados
+            const resolvedPhoneGroups = new Set(resolvedContacts.map(c => c.phone));
+            const updatedContacts = contacts.filter(contact => {
+              const phoneGroup = duplicates.find(d => d.phone === contact.phone);
+              if (!phoneGroup) return true; // Não é duplicado, manter
+              
+              // Se é duplicado, verificar se foi selecionado
+              return resolvedContacts.some(resolved => 
+                resolved.phone === contact.phone && 
+                resolved.name === contact.name
+              );
+            });
+            
+            setContacts(updatedContacts);
+            setDuplicates([]);
+            setShowDuplicateModal(false);
+            
+            const removedCount = contacts.length - updatedContacts.length;
+            toast.success(`${resolvedContacts.length} contatos únicos mantidos, ${removedCount} duplicados removidos.`);
+          }}
+        />
       )}
     </div>
   );

@@ -10,6 +10,10 @@ import { DeleteContactDialog } from './delete-contact-dialog';
 import { Edit, Trash2, Search, Filter, Download, ListPlus, ChevronDown } from 'lucide-react';
 import { Database } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
+import { EditContactModal } from './edit-contact-modal';
+import { DuplicateAlert } from './duplicate-alert';
+import { DuplicateResolutionModal } from './duplicate-resolution-modal';
+import { useDuplicateDetection, type Contact as HookContact } from '@/hooks/use-duplicate-detection';
 
 type Contact = {
   id: string;
@@ -36,12 +40,35 @@ export function ContactsTable({ initialContacts, userId }: ContactsTableProps) {
   const [pageSize, setPageSize] = useState(10);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [editModal, setEditModal] = useState<null | { id: string; name: string; phone: string }>(null);
   // Auto refresh quando novo contato for salvo
   useEffect(() => {
-    const onRefresh = () => router.refresh();
+    const onRefresh = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('contacts')
+          .select('id, name, phone, custom_fields, created_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+        if (!error && data) {
+          const mapped: Contact[] = data.map((row: any) => ({
+            id: row.id,
+            name: row.name,
+            phone: row.phone,
+            email: row.custom_fields?.email || undefined,
+            created_at: row.created_at,
+          }));
+          setContacts(mapped);
+        } else {
+          router.refresh();
+        }
+      } catch {
+        router.refresh();
+      }
+    };
     document.addEventListener('contacts:refresh' as any, onRefresh);
     return () => document.removeEventListener('contacts:refresh' as any, onRefresh);
-  }, [router]);
+  }, [router, supabase, userId]);
   
   // Seleção por checkbox
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -67,6 +94,62 @@ export function ContactsTable({ initialContacts, userId }: ContactsTableProps) {
   const [isMoving, setIsMoving] = useState(false);
   const [pageContactLists, setPageContactLists] = useState<Record<string, string[]>>({});
   const [isMerging, setIsMerging] = useState(false);
+  
+  // Estados para duplicados
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const { duplicates, hasDuplicates, duplicateStats, resolveDuplicates } = useDuplicateDetection(contacts as HookContact[]);
+  
+  // Verificação periódica em background (sem interface visual)
+  useEffect(() => {
+    if (!contacts.length) return;
+    
+    // Verificar duplicados a cada 30 minutos
+    const interval = setInterval(() => {
+      if (hasDuplicates && duplicateStats) {
+        console.log(`🔍 [${new Date().toLocaleTimeString()}] Verificação periódica: ${duplicates.length} grupos de duplicados encontrados`);
+        
+        // Mostrar toast amarelo informativo
+        toast(
+          (t) => (
+            <div className="flex items-start gap-3">
+              <div className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0">⚠️</div>
+              <div className="flex-1">
+                <div className="font-medium text-yellow-800 mb-1">
+                  Duplicados detectados!
+                </div>
+                <div className="text-sm text-yellow-700 mb-2">
+                  {duplicateStats.uniquePhones} telefones com múltiplos contatos 
+                  ({duplicateStats.totalDuplicates} contatos duplicados)
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    toast.dismiss(t.id);
+                    setShowDuplicateModal(true);
+                  }}
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white text-xs"
+                >
+                  Resolver Duplicados
+                </Button>
+              </div>
+            </div>
+          ),
+          {
+            duration: 10000,
+            icon: null,
+            style: {
+              background: '#fefce8',
+              border: '1px solid #fbbf24',
+              color: '#92400e'
+            }
+          }
+        );
+      }
+    }, 30 * 60 * 1000); // 30 minutos
+    
+    // Cleanup
+    return () => clearInterval(interval);
+  }, [contacts.length, hasDuplicates, duplicates, duplicateStats]);
 
   useEffect(() => {
     const loadLists = async () => {
@@ -74,7 +157,7 @@ export function ContactsTable({ initialContacts, userId }: ContactsTableProps) {
         const { data, error } = await supabase
           .from('contact_lists')
           .select('id, name')
-          .eq('organization_id', userId);
+          .eq('user_id', userId as any);
         if (error) throw error;
         setLists(data || []);
       } catch (err: any) {
@@ -297,7 +380,7 @@ export function ContactsTable({ initialContacts, userId }: ContactsTableProps) {
     if (selectedIds.length === 0) return;
     try {
       setIsMoving(true);
-      const orgId = await ensureOrganization();
+      // const orgId = await ensureOrganization();
       let listId = targetListId;
       if (listId === 'new') {
         if (!newListName.trim()) {
@@ -307,7 +390,7 @@ export function ContactsTable({ initialContacts, userId }: ContactsTableProps) {
         }
         const { data: created, error: createErr } = await supabase
           .from('contact_lists')
-          .insert({ user_id: userId, organization_id: orgId, name: newListName.trim() } as any)
+          .insert({ user_id: userId, organization_id: userId, name: newListName.trim() } as any)
           .select('id')
           .single();
         if (createErr) throw createErr;
@@ -378,6 +461,13 @@ export function ContactsTable({ initialContacts, userId }: ContactsTableProps) {
           </Button>
         </div>
       </div>
+      
+      {/* Alerta de Duplicados - Sempre visível quando houver duplicados */}
+      <DuplicateAlert 
+        contacts={contacts}
+        onResolveDuplicates={() => setShowDuplicateModal(true)}
+        showToast={false}
+      />
       
       {selectedIds.length > 0 && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-md border bg-[var(--color-surface)]">
@@ -465,11 +555,14 @@ export function ContactsTable({ initialContacts, userId }: ContactsTableProps) {
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex gap-2 justify-start">
-                      <Link href={`/contatos/editar/${contact.id}`}>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={() => setEditModal({ id: contact.id, name: contact.name, phone: contact.phone })}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
                       <Button 
                         variant="ghost" 
                         size="sm" 
@@ -537,6 +630,37 @@ export function ContactsTable({ initialContacts, userId }: ContactsTableProps) {
           isOpen={isDeleteDialogOpen}
           onClose={closeDeleteDialog}
           onDeleted={handleContactDeleted}
+        />
+      )}
+
+      {editModal && (
+        <EditContactModal
+          open={true}
+          onClose={() => setEditModal(null)}
+          userId={userId}
+          contactId={editModal.id}
+          initialData={{ name: editModal.name, phone: editModal.phone }}
+        />
+      )}
+
+      {/* Modal de Resolução de Duplicados */}
+      {showDuplicateModal && (
+        <DuplicateResolutionModal
+          isOpen={showDuplicateModal}
+          duplicates={duplicates}
+          onClose={() => setShowDuplicateModal(false)}
+          onResolve={(resolvedContacts) => {
+            // Atualizar a lista de contatos removendo os duplicados não selecionados
+            const updatedContacts = resolveDuplicates(resolvedContacts as HookContact[]) as Contact[];
+            setContacts(updatedContacts);
+            setShowDuplicateModal(false);
+            
+            const removedCount = contacts.length - updatedContacts.length;
+            toast.success(`${resolvedContacts.length} contatos únicos mantidos, ${removedCount} duplicados removidos.`);
+            
+            // Atualizar a página
+            router.refresh();
+          }}
         />
       )}
     </div>

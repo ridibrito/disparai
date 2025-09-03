@@ -49,19 +49,18 @@ export function ContactsTabs({ userId, contacts, lists, remainingContacts }: Con
   }, [lists]);
 
   const ensureOrganization = async (): Promise<string> => {
-    const { data: org, error: selErr } = await supabase
+    const { data: org } = await supabase
       .from('organizations' as any)
       .select('id')
       .eq('id', userId as any)
       .maybeSingle();
-    if (!selErr && (org as any)?.id) return (org as any).id as any;
-    const { data: inserted, error: insErr } = await supabase
+    if ((org as any)?.id) return (org as any).id as string;
+    const { data: inserted } = await supabase
       .from('organizations' as any)
       .insert({ id: userId as any, owner_id: userId as any, name: 'Conta' } as any)
       .select('id')
       .single();
-    if (insErr) throw insErr;
-    return (inserted as any).id as any;
+    return (inserted as any).id as string;
   };
 
   const handleCreateList = async () => {
@@ -81,7 +80,11 @@ export function ContactsTabs({ userId, contacts, lists, remainingContacts }: Con
       setListsState((prev) => [data as any, ...prev]);
       setIsCreateOpen(false);
       setNewListName('');
-      toast.success('Lista criada');
+      toast.custom((t) => (
+        <div className="bg-green-600 text-white px-4 py-2 rounded shadow">
+          Lista criada
+        </div>
+      ));
       try {
         document.dispatchEvent(new CustomEvent('lists:refresh'));
       } catch {}
@@ -267,7 +270,11 @@ export function ContactsTabs({ userId, contacts, lists, remainingContacts }: Con
                         setListsState((prev) => prev.filter((l) => l.id !== isMovingOpen!.fromListId));
                         setIsMovingOpen(null);
                         setMoveTargetListId('');
-                        toast.success('Contatos movidos e lista apagada');
+                        toast.custom((t) => (
+                          <div className="bg-red-600 text-white px-4 py-2 rounded shadow">
+                            Contatos movidos e lista apagada
+                          </div>
+                        ));
                         document.dispatchEvent(new CustomEvent('lists:refresh'));
                       } catch (err: any) {
                         toast.error(err.message || 'Erro ao mover e apagar lista');
@@ -284,14 +291,18 @@ export function ContactsTabs({ userId, contacts, lists, remainingContacts }: Con
                   <h3 className="text-lg font-semibold mb-3">Apagar lista</h3>
                   <p className="text-sm text-gray-600 mb-4">Tem certeza que deseja apagar a lista "{isDeleteOpen.listName}"?</p>
                   <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setIsDeleteOpen(null)}>Cancelar</Button>
-                    <Button onClick={async () => {
+                    <Button variant="outline" className="border-red-600 text-red-600 hover:bg-red-50" onClick={() => setIsDeleteOpen(null)}>Cancelar</Button>
+                    <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={async () => {
                       try {
                         const { error } = await supabase.from('contact_lists').delete().eq('id', isDeleteOpen.listId);
                         if (error) throw error;
                         setListsState((prev) => prev.filter((x) => x.id !== isDeleteOpen.listId));
                         setIsDeleteOpen(null);
-                        toast.success('Lista apagada');
+                        toast.custom((t) => (
+                          <div className="bg-red-600 text-white px-4 py-2 rounded shadow">
+                            Lista apagada
+                          </div>
+                        ));
                         document.dispatchEvent(new CustomEvent('lists:refresh'));
                       } catch (err: any) {
                         toast.error(err.message || 'Erro ao apagar lista');

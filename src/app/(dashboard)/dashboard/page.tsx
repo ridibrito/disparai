@@ -11,23 +11,43 @@ export const metadata = {
   description: 'Gerencie suas campanhas e mensagens de WhatsApp',
 };
 
-export default async function Dashboard() {
+export default async function DashboardPage() {
   const supabase = await createServerClient();
-  
-  // Verificar se o usuário está autenticado (forma segura)
   const { data: { user } } = await supabase.auth.getUser();
-  
-  // Se não estiver autenticado, redirecionar para a página de login
-  // if (!session) {
-  //   redirect('/auth/login');
-  // }
-  
-  // Métricas
   const userId = user?.id || '';
-  // Em multi-tenant, usamos a organização atual = id do usuário (seed) por enquanto
-  const currentOrgId = userId;
-  // Filtro por período via query string
-  const searchParams = new URLSearchParams(cookies().get('next-url-qs')?.value || '');
+
+  // Buscar informações da organização do usuário
+  let organizationInfo: any = null;
+  let currentOrgId = userId;
+
+  try {
+    const { data: userData } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('id', userId)
+      .single();
+
+    if (userData?.organization_id) {
+      currentOrgId = userData.organization_id;
+      
+      // Buscar informações da organização
+      const { data: orgData } = await supabase
+        .from('organizations')
+        .select('name, company_name, owner_name')
+        .eq('id', currentOrgId)
+        .single();
+        
+      if (orgData) {
+        organizationInfo = orgData;
+      }
+    }
+  } catch (error) {
+    console.log('Erro ao buscar organização:', error);
+  }
+  
+  // Filtro por período via query string (cookies precisa ser aguardado)
+  const cookieStore = await cookies();
+  const searchParams = new URLSearchParams(cookieStore.get('next-url-qs')?.value || '');
   const range = searchParams.get('range') || '7d';
   let fromISO: string | null = null;
   let toISO: string | null = null;
@@ -46,6 +66,33 @@ export default async function Dashboard() {
     if (from) fromISO = new Date(from).toISOString();
     if (to) toISO = new Date(new Date(to).getTime() + 24 * 3600 * 1000 - 1).toISOString();
   }
+  async function withRange(query: any) {
+    if (fromISO) query = query.gte('created_at', fromISO);
+    if (toISO) query = query.lte('created_at', toISO);
+    return query;
+  }
+
+  const contactsCountPromise = withRange(
+    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('user_id', userId)
+  );
+  const campaignsCountPromise = withRange(
+    supabase.from('campaigns').select('id', { count: 'exact', head: true }).eq('user_id', userId)
+  );
+  const recentCampaignsPromise = withRange(
+    supabase.from('campaigns').select('id, name, status, created_at').eq('user_id', userId)
+      .order('created_at', { ascending: false }).limit(5)
+  );
+  const failedCountPromise = withRange(
+    supabase.from('campaigns').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'failed')
+  );
+  const activeChatsPromise = supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'active');
+  const leads7dPromise = supabase
+    .from('conversations')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .gte('created_at', new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString());
+
   const [
     { count: contactsCount },
     { count: campaignsCount },
@@ -54,44 +101,42 @@ export default async function Dashboard() {
     { count: activeChatsCount },
     { count: leads7dCount },
   ] = await Promise.all([
-    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId)
-      .gte(fromISO ? 'created_at' : 'id', fromISO || undefined as any)
-      .lte(toISO ? 'created_at' : 'id', toISO || undefined as any),
-    supabase.from('campaigns').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId)
-      .gte(fromISO ? 'created_at' : 'id', fromISO || undefined as any)
-      .lte(toISO ? 'created_at' : 'id', toISO || undefined as any),
-    supabase.from('campaigns').select('id, name, status, created_at').eq('organization_id', currentOrgId)
-      .gte(fromISO ? 'created_at' : 'id', fromISO || undefined as any)
-      .lte(toISO ? 'created_at' : 'id', toISO || undefined as any)
-      .order('created_at', { ascending: false }).limit(5),
-    supabase.from('campaigns').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId).eq('status', 'failed')
-      .gte(fromISO ? 'created_at' : 'id', fromISO || undefined as any)
-      .lte(toISO ? 'created_at' : 'id', toISO || undefined as any),
-    supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId).eq('status', 'active'),
-    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId)
-      .gte('created_at', new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString()),
+    contactsCountPromise,
+    campaignsCountPromise,
+    recentCampaignsPromise,
+    failedCountPromise,
+    activeChatsPromise,
+    leads7dPromise,
   ]);
 
   const runningCount = (recentCampaignsRaw || []).filter((c: any) => c.status === 'running').length;
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="mb-8 mt-4 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-          <p className="text-gray-600">Resumo de contatos, campanhas e atividades recentes.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <PeriodFilter />
-          <QuickActions />
-          <ReportActions 
-            campaigns={(recentCampaignsRaw as any) || []}
-            contactsTotal={contactsCount || 0}
-            campaignsTotal={campaignsCount || 0}
-            runningCampaigns={runningCount || 0}
-          />
-        </div>
+      <div className="mb-8 mt-4">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+        <p className="text-gray-600">Visão geral da sua empresa.</p>
+        
+        {/* Informações da Empresa */}
+        {organizationInfo && (
+          <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                <span className="text-white text-xl font-bold">
+                  {organizationInfo.company_name?.charAt(0) || 'E'}
+                </span>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {organizationInfo.company_name || organizationInfo.name}
+                </h3>
+                <p className="text-sm text-gray-600">
+                  👑 Proprietário: {organizationInfo.owner_name}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -159,7 +204,7 @@ export default async function Dashboard() {
             <h3 className="text-sm font-semibold text-gray-900">Leads (7 dias)</h3>
           </div>
           <p className="text-3xl font-bold text-teal-600">{leads7dCount || 0}</p>
-          <p className="text-xs text-gray-500 mt-1">Contatos novos</p>
+          <p className="text-xs text-gray-500 mt-1">Conversas iniciadas nos últimos 7 dias</p>
         </div>
       </div>
       

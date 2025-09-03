@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'react-hot-toast';
+import { showDangerToast } from '@/components/ui/app-toast';
 import { createClientComponentClient } from '@/lib/supabase';
 
 type DeleteContactDialogProps = {
@@ -32,12 +34,12 @@ export function DeleteContactDialog({
       
       if (error) throw error;
       
-      alert('Contato excluído com sucesso!');
+      showDangerToast('Contato excluído com sucesso!');
       onDeleted();
       onClose();
     } catch (error: any) {
       console.error('Erro ao excluir contato:', error);
-      alert(error.message || 'Erro ao excluir contato. Tente novamente.');
+      toast.error(error.message || 'Erro ao excluir contato. Tente novamente.');
     } finally {
       setIsDeleting(false);
     }

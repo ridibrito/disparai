@@ -29,10 +29,10 @@ export function PlanSummary({ userId }: PlanSummaryProps) {
         setLoading(true);
         
         // Buscar detalhes do plano do usuário
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('plan_id, plans(name, contact_limit, message_limit, features)')
-          .eq('id', userId)
+        const { data: userPlan, error: userError } = await supabase
+          .from('user_plans' as any)
+          .select('*, plans(*)')
+          .eq('user_id', userId as any)
           .single();
         
         if (userError) {
@@ -40,7 +40,7 @@ export function PlanSummary({ userId }: PlanSummaryProps) {
           return;
         }
 
-        if (!userData || !userData.plans) {
+        if (!userPlan || !(userPlan as any).plans) {
           console.warn('Aviso: usuário sem plano vinculado. Exibindo fallback.');
           return;
         }
@@ -49,7 +49,7 @@ export function PlanSummary({ userId }: PlanSummaryProps) {
         const { count: contactCount } = await supabase
           .from('contacts')
           .select('id', { count: 'exact', head: true })
-          .eq('organization_id', userId);
+          .eq('user_id', userId as any);
         
         // Contar mensagens do mês atual
         const now = new Date();
@@ -59,7 +59,7 @@ export function PlanSummary({ userId }: PlanSummaryProps) {
         const { count: messageCount } = await supabase
           .from('messages')
           .select('id', { count: 'exact', head: true })
-          .eq('organization_id', userId)
+          .eq('user_id', userId as any)
           .gte('created_at', firstDayOfMonth)
           .lte('created_at', lastDayOfMonth);
         
@@ -67,13 +67,13 @@ export function PlanSummary({ userId }: PlanSummaryProps) {
         const { count: deviceCount } = await supabase
           .from('devices')
           .select('id', { count: 'exact', head: true })
-          .eq('organization_id', userId);
+          .eq('user_id', userId as any);
         
         setPlanDetails({
-          name: userData.plans.name,
-          contactLimit: userData.plans.contact_limit,
-          messageLimit: userData.plans.message_limit,
-          deviceLimit: userData.plans.features?.dispositivos || 1,
+          name: (userPlan as any).plans.name,
+          contactLimit: (userPlan as any).plans.contact_limit,
+          messageLimit: (userPlan as any).plans.message_limit,
+          deviceLimit: (userPlan as any).plans.features?.dispositivos || 1,
           currentContacts: contactCount || 0,
           currentMessages: messageCount || 0,
           currentDevices: deviceCount || 0
