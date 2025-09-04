@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Zap, MessageSquare, Users, Brain, BarChart3, ShieldCheck, Webhook, Workflow } from 'lucide-react';
 import HeroVideoDialog from '@/components/ui/hero-video-dialog';
+import AnimatedBeamDemo from '@/components/ui/animated-beam-demo';
 
 export default function Home() {
   return (
@@ -10,9 +11,20 @@ export default function Home() {
       <header className="py-4 backdrop-blur bg-white/70 sticky top-0 z-30 border-b border-gray-100">
         <div className="container flex items-center justify-between px-4 mx-auto">
           <div className="flex items-center gap-2">
-            <Image src={'/logo.png'} alt='logo disparai' width={160} height={48}/>
+            <Image src={'/logo.png'} alt='logo disparai' width={100} height={30} className="md:w-[140px] md:h-[42px]"/>
           </div>
-          <div className="space-x-3">
+          
+          {/* Menu mobile */}
+          <div className="md:hidden">
+            <button className="p-2 text-gray-700 hover:text-[#4bca59]">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          </div>
+          
+          {/* Menu desktop */}
+          <div className="hidden md:flex space-x-3">
             <Link href="#recursos" className="px-4 py-2 text-gray-700 hover:text-[#4bca59]">Recursos</Link>
             <Link href="#precos" className="px-4 py-2 text-gray-700 hover:text-[#4bca59]">Preços</Link>
             <Link href="#integracoes" className="px-4 py-2 text-gray-700 hover:text-[#4bca59]">Integrações</Link>
@@ -30,12 +42,16 @@ export default function Home() {
           <div className="pointer-events-none absolute inset-0 [background:radial-gradient(600px_200px_at_50%_-40px,#4bca5920,transparent_80%),radial-gradient(400px_160px_at_20%_10%,#4bca5915,transparent_60%),radial-gradient(500px_180px_at_80%_0%,#4bca5912,transparent_60%)]"></div>
           <div className="container relative px-4 mx-auto text-center">
             <span className="inline-block px-3 py-1 mb-4 text-xs font-medium rounded-full bg-[#4bca5915] text-[#2da643]">Platforma de Conversas & Campanhas</span>
-            <h1 className="mx-auto mb-4 text-4xl font-extrabold tracking-tight md:text-6xl text-gray-900">
+            <h1 className="mx-auto mb-4 text-3xl font-extrabold tracking-tight md:text-6xl text-gray-900">
               Converta conversas em <span className="text-[#4bca59]">resultados</span>
             </h1>
-            <p className="mx-auto mb-8 max-w-2xl text-lg text-gray-600">Dispare mensagens, crie fluxos e gerencie equipes no WhatsApp com uma experiência leve, rápida e encantadora.</p>
-            <div className="flex items-center justify-center gap-3">
-              <Link href="/signup" className="px-6 py-3 text-white rounded-md btn-primary">Criar conta</Link>
+            <p className="mx-auto mb-8 max-w-2xl text-lg text-gray-600">
+              Dispare mensagens, crie fluxos e gerencie equipes no WhatsApp com uma experiência leve, rápida e encantadora.
+            </p>
+            <div className="flex items-center justify-center mb-8">
+              <Link href="/signup" className="px-8 py-4 text-white rounded-lg btn-primary text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+                🚀 Teste Grátis por 3 Dias
+              </Link>
             </div>
             {/* Demo em vídeo (Hero Video Dialog) */}
             <div className="relative mt-14">
@@ -52,7 +68,8 @@ export default function Home() {
           </div>
         </section>
 
-        
+        {/* Demonstração AnimatedBeam */}
+        <AnimatedBeamDemo />
 
         {/* Recursos */}
         <section id="recursos" className="py-20 bg-white">
@@ -69,7 +86,6 @@ export default function Home() {
                   <h3 className="text-lg font-semibold text-gray-900">Disparos em massa</h3>
                 </div>
                 <p className="text-gray-600">Envie campanhas para listas ou segmentos com retomada em caso de falha e janela de horário.</p>
-                <Link href="/disparos" className="mt-3 inline-flex text-[#4bca59] hover:underline">Saiba mais</Link>
               </div>
 
               <div className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
@@ -78,7 +94,6 @@ export default function Home() {
                   <h3 className="text-lg font-semibold text-gray-900">Caixa de conversas</h3>
                 </div>
                 <p className="text-gray-600">Organize e atribua conversas a atendentes com histórico centralizado e indicadores de status.</p>
-                <Link href="/conversas" className="mt-3 inline-flex text-[#4bca59] hover:underline">Saiba mais</Link>
               </div>
 
               <div className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
@@ -87,7 +102,6 @@ export default function Home() {
                   <h3 className="text-lg font-semibold text-gray-900">Contatos & listas</h3>
                 </div>
                 <p className="text-gray-600">Importe CSV, crie listas e segmente públicos para campanhas e fluxos.</p>
-                <Link href="/contatos" className="mt-3 inline-flex text-[#4bca59] hover:underline">Saiba mais</Link>
               </div>
 
               <div className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
@@ -96,7 +110,6 @@ export default function Home() {
                   <h3 className="text-lg font-semibold text-gray-900">Atendimento com IA</h3>
                 </div>
                 <p className="text-gray-600">Respostas automáticas (padrão/avançado) e triagem inicial para reduzir tempo de atendimento.</p>
-                <Link href="/conversas" className="mt-3 inline-flex text-[#4bca59] hover:underline">Saiba mais</Link>
               </div>
 
               <div className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
@@ -105,26 +118,8 @@ export default function Home() {
                   <h3 className="text-lg font-semibold text-gray-900">Relatórios e métricas</h3>
                 </div>
                 <p className="text-gray-600">Acompanhe envios, entregas, falhas, conversas ativas e geração de relatórios rápidos.</p>
-                <Link href="/dashboard" className="mt-3 inline-flex text-[#4bca59] hover:underline">Saiba mais</Link>
               </div>
 
-              <div className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
-                <div className="flex items-center gap-3 mb-3">
-                  <Webhook className="w-5 h-5 text-[#4bca59]" />
-                  <h3 className="text-lg font-semibold text-gray-900">Integrações & API</h3>
-                </div>
-                <p className="text-gray-600">Conexão com API do WhatsApp, webhooks e importação via planilhas/CRMs.</p>
-                <Link href="/configuracoes/conexao-api" className="mt-3 inline-flex text-[#4bca59] hover:underline">Saiba mais</Link>
-              </div>
-
-              <div className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
-                <div className="flex items-center gap-3 mb-3">
-                  <ShieldCheck className="w-5 h-5 text-[#4bca59]" />
-                  <h3 className="text-lg font-semibold text-gray-900">Segurança & multi-tenant</h3>
-                </div>
-                <p className="text-gray-600">LGPD, RLS por organização e controle de acesso por papéis.</p>
-                <Link href="/configuracoes/seguranca" className="mt-3 inline-flex text-[#4bca59] hover:underline">Saiba mais</Link>
-              </div>
 
               <div className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
                 <div className="flex items-center gap-3 mb-3">
@@ -132,7 +127,6 @@ export default function Home() {
                   <h3 className="text-lg font-semibold text-gray-900">Fluxos e templates</h3>
                 </div>
                 <p className="text-gray-600">Sequências com delays e condições, além de modelos de mensagens reutilizáveis.</p>
-                <Link href="/disparos/novo" className="mt-3 inline-flex text-[#4bca59] hover:underline">Saiba mais</Link>
               </div>
             </div>
           </div>
@@ -164,10 +158,10 @@ export default function Home() {
                 </ul>
                 <Link 
                   href="/signup"
-                  className="mt-6 inline-flex items-center justify-center rounded-lg px-4 py-2 text-white font-medium shadow-sm transition-colors"
+                  className="mt-6 inline-flex items-center justify-center rounded-lg px-6 py-3 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
                   style={{ backgroundColor: '#00DC4F' }}
                 >
-                  Começar Agora
+                  🚀 Teste Grátis por 3 Dias
                 </Link>
               </div>
               
@@ -191,10 +185,10 @@ export default function Home() {
                 </ul>
                 <Link 
                   href="/signup"
-                  className="mt-6 inline-flex items-center justify-center rounded-lg px-4 py-2 text-white font-medium shadow-sm transition-colors"
+                  className="mt-6 inline-flex items-center justify-center rounded-lg px-6 py-3 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
                   style={{ backgroundColor: '#00DC4F' }}
                 >
-                  Começar Agora
+                  🚀 Teste Grátis por 3 Dias
                 </Link>
               </div>
               
@@ -216,10 +210,10 @@ export default function Home() {
                 </ul>
                 <Link 
                   href="mailto:contato@disparai.com"
-                  className="mt-6 inline-flex items-center justify-center rounded-lg px-4 py-2 font-medium shadow-sm transition-colors border"
+                  className="mt-6 inline-flex items-center justify-center rounded-lg px-6 py-3 font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 border-2"
                   style={{ color: '#00DC4F', borderColor: '#00DC4F' }}
                 >
-                  Fale Conosco
+                  💬 Fale Conosco
                 </Link>
               </div>
             </div>
@@ -251,41 +245,25 @@ export default function Home() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">WhatsApp Business API</h3>
-                <p className="text-gray-600">Integração preparada para alto volume respeitando boas práticas.</p>
+                <div className="flex items-center gap-3 mb-3">
+                  <img src="https://img.icons8.com/color/48/whatsapp.png" alt="WhatsApp" className="w-8 h-8" />
+                  <h3 className="text-lg font-semibold text-gray-900">WhatsApp Business</h3>
+                </div>
+                <p className="text-gray-600">Integração nativa com WhatsApp Business API para alto volume respeitando boas práticas.</p>
               </div>
               <div className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Planilhas & CSV</h3>
-                <p className="text-gray-600">Importe contatos de planilhas (Google Sheets/CSV) em poucos cliques.</p>
+                <div className="flex items-center gap-3 mb-3">
+                  <img src="https://img.icons8.com/color/48/google-calendar--v2.png" alt="Google Calendar" className="w-8 h-8" />
+                  <h3 className="text-lg font-semibold text-gray-900">Google Calendar</h3>
+                </div>
+                <p className="text-gray-600">Agende reuniões automaticamente e sincronize com sua agenda do Google.</p>
               </div>
               <div className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">CRMs & Webhooks</h3>
-                <p className="text-gray-600">Conecte com CRMs e receba eventos via webhooks para automações.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Segurança & Conformidade */}
-        <section id="seguranca" className="py-20 bg-white">
-          <div className="container px-4 mx-auto">
-            <div className="text-center max-w-2xl mx-auto mb-12">
-              <h2 className="text-3xl font-bold text-gray-900 mb-3">Segurança & Conformidade</h2>
-              <p className="text-gray-600">Arquitetura multi-tenant com políticas robustas para proteger seus dados.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">LGPD & controle de acesso</h3>
-                <p className="text-gray-600">Políticas de acesso por organização e minimização de dados.</p>
-              </div>
-              <div className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">RLS no banco</h3>
-                <p className="text-gray-600">Row Level Security ativo para isolar dados por usuário/organização.</p>
-              </div>
-              <div className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Criptografia & backups</h3>
-                <p className="text-gray-600">Criptografia em trânsito e rotinas de backup para continuidade.</p>
+                <div className="flex items-center gap-3 mb-3">
+                  <img src="/bitrix.png" alt="CRM" className="w-16 h-4" />
+                  <h3 className="text-lg font-semibold text-gray-900">CRMs Populares</h3>
+                </div>
+                <p className="text-gray-600">Conecte com Bitrix24, RD Station, Pipedrive e outros CRMs via webhooks.</p>
               </div>
             </div>
           </div>
@@ -401,7 +379,9 @@ export default function Home() {
                 <h3 className="text-xl font-semibold text-gray-900">Pronto para acelerar suas conversas?</h3>
                 <p className="text-gray-600">Teste agora e migre quando quiser. Sem cartão.</p>
               </div>
-              <Link href="/signup" className="px-6 py-3 text-white rounded-md btn-primary">Começar grátis</Link>
+              <Link href="/signup" className="px-8 py-4 text-white rounded-lg btn-primary text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+                🚀 Teste Grátis por 3 Dias
+              </Link>
             </div>
           </div>
         </section>
@@ -410,7 +390,24 @@ export default function Home() {
       {/* Footer */}
       <footer className="py-10 bg-gray-900 text-white">
         <div className="container px-4 mx-auto text-center">
-          <Image src={'/logo_branco.png'} alt='logo disparai' width={140} height={42} className="mx-auto mb-3"/>
+          <Image src={'/logo_branca.png'} alt='logo disparai' width={140} height={42} className="mx-auto mb-6"/>
+          
+          {/* Badges de confiança */}
+          <div className="flex flex-wrap items-center justify-center gap-6 mb-6">
+            <div className="flex items-center gap-2 text-sm text-gray-300">
+              <ShieldCheck className="w-4 h-4 text-[#4bca59]" />
+              LGPD Compliant
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-300">
+              <ShieldCheck className="w-4 h-4 text-[#4bca59]" />
+              SSL Seguro
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-300">
+              <ShieldCheck className="w-4 h-4 text-[#4bca59]" />
+              99.9% Uptime
+            </div>
+          </div>
+          
           <p className="text-sm text-gray-400">© {new Date().getFullYear()} disparai. Todos os direitos reservados.</p>
         </div>
       </footer>

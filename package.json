@@ -5,9 +5,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:analyze": "ANALYZE=true next build",
+    "build:production": "NODE_ENV=production next build",
     "start": "next start",
+    "start:production": "NODE_ENV=production next start",
     "lint": "next lint",
-    "worker:broadcast": "ts-node --transpile-only worker/broadcast.ts"
+    "lint:fix": "next lint --fix",
+    "type-check": "tsc --noEmit",
+    "worker:broadcast": "ts-node --transpile-only worker/broadcast.ts",
+    "postbuild": "next-sitemap",
+    "vercel-build": "npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",

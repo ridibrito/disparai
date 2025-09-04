@@ -49,108 +49,155 @@ export default function LoginForm() {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto p-8 bg-white rounded-lg shadow-lg">
-      {/* Header with Logo */}
-      <div className="text-center mb-8">
-        <div className="flex justify-center mb-4">
-          <Image
-            src="/logo.png"
-            alt="disparai Logo"
-            width={200}
-            height={60}
-            className="h-12 w-auto"
-            priority
-          />
+    <div className="min-h-screen bg-white flex w-full">
+      {/* Lado Esquerdo - Formulário */}
+      <div className="flex items-center justify-center p-12" style={{ width: '30%', minWidth: '400px' }}>
+        <div className="w-full max-w-md space-y-8">
+          {/* Header with Logo */}
+          <div className="text-center">
+                                <div className="flex justify-center mb-6">
+                      <Image
+                        src="/logo.png"
+                        alt="disparai Logo"
+                        width={150}
+                        height={45}
+                        className="h-10 w-auto"
+                        priority
+                      />
+                    </div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-3">Bem-vindo de volta</h1>
+            <p className="text-lg text-gray-600">Entre na sua conta para continuar</p>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 p-4 text-sm text-red-700 bg-red-100 border border-red-200 rounded-md">
+              {error}
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 bg-white p-8 rounded-lg shadow-sm border border-gray-100">
+            {/* Email Field */}
+            <div className="space-y-2">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                {...register('email')}
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:border-gray-400 transition-colors"
+                style={{ '--tw-ring-color': '#4bca59' } as any}
+                placeholder="seu@email.com"
+                disabled={isLoading}
+              />
+              {errors.email && (
+                <p className="text-sm text-red-600 mt-1">{errors.email.message}</p>
+              )}
+            </div>
+
+            {/* Password Field */}
+            <div className="space-y-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                Senha
+              </label>
+              <input
+                id="password"
+                type="password"
+                {...register('password')}
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:border-gray-400 transition-colors"
+                style={{ '--tw-ring-color': '#4bca59' } as any}
+                placeholder="••••••••"
+                disabled={isLoading}
+              />
+              {errors.password && (
+                <p className="text-sm text-red-600 mt-1">{errors.password.message}</p>
+              )}
+            </div>
+
+            {/* Forgot Password Link */}
+            <div className="flex items-center justify-end">
+              <Link 
+                href="/forgot-password" 
+                className="text-sm hover:underline transition-colors"
+                style={{ color: '#4bca59' }}
+              >
+                Esqueceu sua senha?
+              </Link>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3 px-4 text-white font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              style={{ 
+                backgroundColor: '#4bca59',
+                '--tw-ring-color': '#4bca59'
+              } as any}
+            >
+              {isLoading ? 'Entrando...' : 'Entrar'}
+            </button>
+
+            {/* Register Link */}
+            <div className="text-center pt-4 border-t border-gray-200">
+              <p className="text-sm text-gray-600">
+                Não tem uma conta?{' '}
+                <Link 
+                  href="/signup" 
+                  className="hover:underline font-medium transition-colors"
+                  style={{ color: '#4bca59' }}
+                >
+                  Registre-se
+                </Link>
+              </p>
+            </div>
+          </form>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Bem-vindo de volta</h1>
-        <p className="text-gray-600">Entre na sua conta para continuar</p>
       </div>
 
-      {/* Error Message */}
-      {error && (
-        <div className="mb-6 p-4 text-sm text-red-700 bg-red-100 border border-red-200 rounded-md">
-          {error}
+      {/* Lado Direito - Visual Chamativo */}
+      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-[#4bca59] to-[#2da643] relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='30' cy='30' r='4'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          }} />
         </div>
-      )}
-
-      {/* Form */}
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        {/* Email Field */}
-        <div className="space-y-2">
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            {...register('email')}
-            className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:border-gray-400 transition-colors"
-            style={{ '--tw-ring-color': '#4bca59' } as any}
-            placeholder="seu@email.com"
-            disabled={isLoading}
-          />
-          {errors.email && (
-            <p className="text-sm text-red-600 mt-1">{errors.email.message}</p>
-          )}
+        
+        {/* Content */}
+        <div className="relative z-10 flex flex-col items-center justify-center text-center text-white p-12">
+          <div className="max-w-md">
+            <h2 className="text-4xl font-bold mb-6">
+              Transforme conversas em <span className="text-green-200">vendas</span>
+            </h2>
+            <p className="text-xl text-green-100 mb-8">
+              Dispare mensagens em massa, qualifique leads com IA e gerencie equipes no WhatsApp com uma experiência leve e encantadora.
+            </p>
+            
+            {/* Features */}
+            <div className="space-y-4 text-left">
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 bg-green-200 rounded-full"></div>
+                <span className="text-green-100">Disparos em massa automatizados</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 bg-green-200 rounded-full"></div>
+                <span className="text-green-100">IA para qualificação de leads</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 bg-green-200 rounded-full"></div>
+                <span className="text-green-100">Gestão completa de equipes</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 bg-green-200 rounded-full"></div>
+                <span className="text-green-100">Relatórios e métricas detalhadas</span>
+              </div>
+            </div>
+          </div>
         </div>
-
-        {/* Password Field */}
-        <div className="space-y-2">
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-            Senha
-          </label>
-          <input
-            id="password"
-            type="password"
-            {...register('password')}
-            className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:border-gray-400 transition-colors"
-            style={{ '--tw-ring-color': '#4bca59' } as any}
-            placeholder="••••••••"
-            disabled={isLoading}
-          />
-          {errors.password && (
-            <p className="text-sm text-red-600 mt-1">{errors.password.message}</p>
-          )}
-        </div>
-
-        {/* Forgot Password Link */}
-        <div className="flex items-center justify-end">
-          <Link 
-            href="/forgot-password" 
-            className="text-sm hover:underline transition-colors"
-            style={{ color: '#4bca59' }}
-          >
-            Esqueceu sua senha?
-          </Link>
-        </div>
-
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="w-full py-3 px-4 text-white font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          style={{ 
-            backgroundColor: '#4bca59',
-            '--tw-ring-color': '#4bca59'
-          } as any}
-        >
-          {isLoading ? 'Entrando...' : 'Entrar'}
-        </button>
-
-        {/* Register Link */}
-        <div className="text-center pt-4 border-t border-gray-200">
-          <p className="text-sm text-gray-600">
-            Não tem uma conta?{' '}
-            <Link 
-              href="/signup" 
-              className="hover:underline font-medium transition-colors"
-              style={{ color: '#4bca59' }}
-            >
-              Registre-se
-            </Link>
-          </p>
-        </div>
-      </form>
+      </div>
     </div>
   );
 }

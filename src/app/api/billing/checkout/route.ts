@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createServerClient } from '@/lib/supabaseServer';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2024-06-20',
-});
+// Inicializar Stripe apenas se a chave estiver disponível
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2024-06-20',
+    })
+  : null;
 
 function getBaseUrl() {
   return process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
@@ -22,6 +25,10 @@ function getPriceIdForPlanName(name: string): string | null {
 
 export async function POST(req: Request) {
   try {
+    if (!stripe) {
+      return NextResponse.json({ error: 'Stripe não configurado' }, { status: 500 });
+    }
+
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

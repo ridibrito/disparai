@@ -250,6 +250,21 @@ html.sidebar-collapsed {
   vertical-align: middle;
 }
 
+/* Animação para OrbitingCircles */
+@keyframes orbit {
+  from {
+    transform: rotate(0deg) translateX(var(--radius)) rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg) translateX(var(--radius)) rotate(-360deg);
+  }
+}
+
+.animate-orbit {
+  animation: orbit var(--duration) linear infinite;
+  transform-origin: center;
+}
+
 /* Correções para responsividade */
 @media (max-width: 768px) {
   .dashboard-sidebar {
