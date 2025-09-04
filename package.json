@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "next lint",
+    "worker:broadcast": "ts-node --transpile-only worker/broadcast.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",
@@ -24,16 +25,21 @@
     "@supabase/auth-ui-react": "^0.4.7",
     "@supabase/auth-ui-shared": "^0.1.8",
     "@supabase/ssr": "^0.7.0",
-    "@supabase/supabase-js": "^2.56.1",
+    "@supabase/supabase-js": "^2.45.4",
     "@types/uuid": "^10.0.0",
+    "axios": "^1.11.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
     "framer-motion": "^12.23.12",
     "lucide-react": "^0.542.0",
-    "next": "15.5.2",
+    "next": "14.2.5",
+    "openai": "^4.0.0",
     "papaparse": "^5.5.3",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "pg": "^8.11.5",
+    "pg-boss": "^9.0.3",
+    "react": "^18",
+    "react-dom": "^18",
     "react-hook-form": "^7.62.0",
     "react-hot-toast": "^2.6.0",
     "sonner": "^2.0.7",
@@ -41,17 +47,18 @@
     "tailwind-merge": "^3.3.1",
     "uuid": "^11.1.0",
     "xlsx": "^0.18.5",
-    "zod": "^4.1.5"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.5.2",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.5",
     "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }

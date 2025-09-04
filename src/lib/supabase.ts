@@ -1,5 +1,7 @@
 import { createBrowserClient } from '@supabase/ssr';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
+import { env } from './env';
 
 // Tipos para as tabelas do Supabase
 export type Tables = {
@@ -10,6 +12,7 @@ export type Tables = {
       price: number;
       contact_limit: number;
       message_limit: number;
+      connection_limit: number; // Limite de conexões API por plano
       features: Record<string, any>;
       created_at: string;
       updated_at: string;
@@ -20,6 +23,7 @@ export type Tables = {
       price: number;
       contact_limit: number;
       message_limit: number;
+      connection_limit?: number;
       features?: Record<string, any>;
       created_at?: string;
       updated_at?: string;
@@ -30,6 +34,7 @@ export type Tables = {
       price?: number;
       contact_limit?: number;
       message_limit?: number;
+      connection_limit?: number;
       features?: Record<string, any>;
       created_at?: string;
       updated_at?: string;
@@ -415,13 +420,40 @@ export type Database = {
   };
 };
 
-// Função para criar o cliente do Supabase no lado do cliente
-export const supabaseClient: SupabaseClient<Database> = createBrowserClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Singleton para evitar múltiplas instâncias do GoTrueClient
+let supabaseClientInstance: SupabaseClient<Database> | null = null;
 
-export const createClientComponentClient = (): SupabaseClient<Database> => supabaseClient;
+// Função para criar o cliente do Supabase no lado do cliente (singleton)
+export const createClientComponentClient = (): SupabaseClient<Database> => {
+  if (!supabaseClientInstance) {
+    supabaseClientInstance = createBrowserClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://temp.supabase.co',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'temp_anon_key'
+    );
+  }
+  return supabaseClientInstance;
+};
+
+// Export para compatibilidade
+export const supabaseClient = createClientComponentClient();
 
 // Função para criar o cliente do Supabase no lado do servidor (com cookies)
 // Nota: utilitário de servidor foi movido para '@/lib/supabaseServer'
+
+// Cliente admin para operações que precisam contornar RLS
+export const supabaseAdmin = createClient(
+  env.supabase.url || 'https://temp.supabase.co', 
+  env.supabase.serviceRoleKey || 'temp_service_role_key', 
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
+
+// Cliente normal para operações do usuário
+export const supabase = createClient(
+  env.supabase.url || 'https://temp.supabase.co', 
+  env.supabase.anonKey || 'temp_anon_key'
+);

@@ -23,8 +23,8 @@ export default function ConfiguracoesPage() {
       color: 'text-green-500'
     },
     {
-      title: 'Conexão API',
-      description: 'Configure sua API do WhatsApp',
+      title: 'Conexões API',
+      description: 'Gerencie WhatsApp Cloud API e WhatsApp Disparai',
       icon: Wifi,
       href: '/configuracoes/conexao-api',
       color: 'text-purple-500'

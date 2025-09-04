@@ -1,0 +1,29 @@
+# Arquivo .env.local para desenvolvimento
+# Copie este conteúdo para um arquivo chamado .env.local na raiz do projeto
+
+# Meta WhatsApp Cloud API (valores temporários para desenvolvimento)
+META_PHONE_NUMBER_ID=temp_phone_number_id
+META_ACCESS_TOKEN=temp_access_token
+META_VERIFY_TOKEN=temp_verify_token
+WHATSAPP_API_VERSION=v18.0
+
+# Supabase (valores temporários para desenvolvimento)
+NEXT_PUBLIC_SUPABASE_URL=https://temp.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=temp_anon_key
+SUPABASE_URL=https://temp.supabase.co
+SUPABASE_ANON_KEY=temp_anon_key
+SUPABASE_SERVICE_ROLE_KEY=temp_service_role_key
+DATABASE_URL=postgresql://temp:temp@temp:5432/temp
+
+# OpenAI (valor temporário para desenvolvimento)
+OPENAI_API_KEY=temp_openai_key
+OPENAI_MODEL=gpt-4
+OPENAI_TEMPERATURE=0.7
+
+# Google Calendar (opcional)
+GOOGLE_SA_JSON_BASE64=
+GOOGLE_CALENDAR_ID=primary
+
+# App
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+TZ=America/Sao_Paulo

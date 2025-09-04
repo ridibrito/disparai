@@ -31,25 +31,25 @@ import { Card, CardContent } from '@/components/ui/card';
 import { PlanLimitAlert } from '@/components/plan/plan-limit-alert';
 
 // Definir o esquema de validação
-const campaignFormSchema = z.object({
+const disparoFormSchema = z.object({
   name: z.string().min(3, {
-    message: 'O nome da campanha deve ter pelo menos 3 caracteres',
+    message: 'O nome do disparo deve ter pelo menos 3 caracteres',
   }),
   message: z.string().min(5, {
     message: 'A mensagem deve ter pelo menos 5 caracteres',
   }),
-  // Permitir campanhas sem credencial (MVP/Sandbox) usando '' ou 'no-credentials'
+  // Permitir disparos sem credencial (MVP/Sandbox) usando '' ou 'no-credentials'
   api_credential_id: z
     .string()
     .uuid({ message: 'Selecione uma credencial de API válida' })
     .or(z.literal(''))
     .or(z.literal('no-credentials')),
-  target_groups: z.array(z.string()).optional(),
+  target_lists: z.array(z.string()).optional(),
   schedule: z.boolean().default(false),
   scheduled_at: z.string().optional(),
 });
 
-type CampaignFormValues = z.infer<typeof campaignFormSchema>;
+type DisparoFormValues = z.infer<typeof disparoFormSchema>;
 
 type ApiCredential = {
   id: string;
@@ -57,35 +57,35 @@ type ApiCredential = {
   provider: string;
 };
 
-type ContactGroup = {
+type ContactList = {
   name: string;
   count: number;
 };
 
-type CampaignFormProps = {
+type DisparoFormProps = {
   userId: string;
   initialData?: any;
   isEditing?: boolean;
 };
 
-export function CampaignForm({ userId, initialData, isEditing = false }: CampaignFormProps) {
+export function DisparoForm({ userId, initialData, isEditing = false }: DisparoFormProps) {
   const router = useRouter();
   const supabase = createClientComponentClient();
   const [apiCredentials, setApiCredentials] = useState<ApiCredential[]>([]);
-  const [contactGroups, setContactGroups] = useState<ContactGroup[]>([]);
+  const [contactLists, setContactLists] = useState<ContactList[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasReachedLimit, setHasReachedLimit] = useState(false);
   const [messageLimit, setMessageLimit] = useState(0);
   const [messageCount, setMessageCount] = useState(0);
   
   // Configurar o formulário
-  const form = useForm<CampaignFormValues>({
-    resolver: zodResolver(campaignFormSchema),
+  const form = useForm<DisparoFormValues>({
+    resolver: zodResolver(disparoFormSchema),
     defaultValues: initialData || {
       name: '',
       message: '',
       api_credential_id: '',
-      target_groups: [],
+      target_lists: [],
       schedule: false,
       scheduled_at: '',
     },
@@ -94,7 +94,7 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
   // Observar o campo de agendamento
   const scheduleEnabled = form.watch('schedule');
   
-  // Carregar credenciais de API e grupos de contatos
+  // Carregar credenciais de API e listas de contatos
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
@@ -109,35 +109,35 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
         if (credentialsError) throw credentialsError;
         setApiCredentials(credentials || []);
         
-        // Buscar grupos de contatos únicos
-        const { data: groups, error: groupsError } = await supabase
+        // Buscar listas de contatos únicas
+        const { data: lists, error: listsError } = await supabase
           .from('contacts')
-          .select('group')
+          .select('list')
           .eq('user_id', userId)
-          .not('group', 'is', null);
+          .not('list', 'is', null);
         
-        if (groupsError) throw groupsError;
+        if (listsError) throw listsError;
         
-        // Contar contatos por grupo
-        const uniqueGroups = [...new Set(groups.map(g => g.group).filter(Boolean))];
-        const groupsWithCount: ContactGroup[] = [];
+        // Contar contatos por lista
+        const uniqueLists = [...new Set(lists.map(l => l.list).filter(Boolean))];
+        const listsWithCount: ContactList[] = [];
         
-        for (const group of uniqueGroups) {
+        for (const list of uniqueLists) {
           const { count, error } = await supabase
             .from('contacts')
             .select('id', { count: 'exact' })
             .eq('user_id', userId)
-            .eq('group', group);
+            .eq('list', list);
           
           if (!error) {
-            groupsWithCount.push({
-              name: group,
+            listsWithCount.push({
+              name: list,
               count: count || 0
             });
           }
         }
         
-        setContactGroups(groupsWithCount);
+        setContactLists(listsWithCount);
         
         // Verificar limite de mensagens
         const { data: userPlan } = await supabase
@@ -169,15 +169,15 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
   }, [userId, supabase]);
   
   // Função para calcular o número de mensagens que serão enviadas
-  const calculateMessageCount = async (selectedGroups: string[]) => {
-    if (!selectedGroups || selectedGroups.length === 0) return 0;
+  const calculateMessageCount = async (selectedLists: string[]) => {
+    if (!selectedLists || selectedLists.length === 0) return 0;
     
     try {
       const { count } = await supabase
         .from('contacts')
         .select('id', { count: 'exact' })
         .eq('user_id', userId)
-        .in('group', selectedGroups);
+        .in('list', selectedLists);
       
       return count || 0;
     } catch (error) {
@@ -187,7 +187,7 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
   };
   
   // Função para enviar o formulário
-  const onSubmit = async (values: CampaignFormValues) => {
+  const onSubmit = async (values: DisparoFormValues) => {
     if (hasReachedLimit) {
       toast.error('Você atingiu o limite de mensagens do seu plano.');
       return;
@@ -197,16 +197,16 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
     
     try {
       // Calcular o número de mensagens que serão enviadas
-      const toSendCount = await calculateMessageCount(values.target_groups || []);
+      const toSendCount = await calculateMessageCount(values.target_lists || []);
       
       if ((messageCount + toSendCount) > messageLimit) {
-        toast.error(`Esta campanha enviará ${toSendCount} mensagens, o que excede seu limite disponível.`);
+        toast.error(`Este disparo enviará ${toSendCount} mensagens, o que excede seu limite disponível.`);
         setIsLoading(false);
         return;
       }
       
-      // Preparar dados da campanha
-      const campaignData = {
+      // Preparar dados do disparo
+      const disparoData = {
         user_id: userId,
         name: values.name,
         message: values.message,
@@ -214,74 +214,74 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
           values.api_credential_id && values.api_credential_id !== 'no-credentials'
             ? values.api_credential_id
             : null,
-        target_groups: values.target_groups || [],
+        target_lists: values.target_lists || [],
         status: values.schedule ? 'scheduled' : 'draft',
         scheduled_at: values.schedule ? new Date(values.scheduled_at || '').toISOString() : null,
       };
       
-      let campaignId;
+      let disparoId;
       
       if (isEditing && initialData?.id) {
-        // Atualizar campanha existente
+        // Atualizar disparo existente
         const { data, error } = await supabase
-          .from('campaigns')
-          .update(campaignData)
+          .from('disparos')
+          .update(disparoData)
           .eq('id', initialData.id)
           .select()
           .single();
         
         if (error) throw error;
-        campaignId = data.id;
-        toast.success('Campanha atualizada com sucesso!');
+        disparoId = data.id;
+        toast.success('Disparo atualizado com sucesso!');
       } else {
-        // Criar nova campanha
+        // Criar novo disparo
         const { data, error } = await supabase
-          .from('campaigns')
-          .insert(campaignData)
+          .from('disparos')
+          .insert(disparoData)
           .select()
           .single();
         
         if (error) throw error;
-        campaignId = data.id;
-        toast.success('Campanha criada com sucesso!');
+        disparoId = data.id;
+        toast.success('Disparo criado com sucesso!');
       }
       
-      // Criar mensagens pendentes para os contatos dos grupos selecionados
+      // Criar mensagens pendentes para os contatos das listas selecionadas
       try {
-        if ((values.target_groups || []).length > 0) {
+        if ((values.target_lists || []).length > 0) {
           const { data: targetContacts, error: targetContactsError } = await supabase
             .from('contacts')
             .select('id')
             .eq('user_id', userId)
-            .in('group', values.target_groups as string[]);
+            .in('list', values.target_lists as string[]);
 
           if (targetContactsError) throw targetContactsError;
 
           const messagesToInsert = (targetContacts || []).map((c) => ({
-            campaign_id: campaignId,
+            disparo_id: disparoId,
             contact_id: c.id,
             status: 'pending' as const,
           }));
 
           if (messagesToInsert.length > 0) {
             const { error: insertMessagesError } = await supabase
-              .from('campaign_messages')
+              .from('disparo_messages')
               .insert(messagesToInsert);
 
             if (insertMessagesError) throw insertMessagesError;
           }
         }
       } catch (messagesError) {
-        console.error('Erro ao criar mensagens da campanha:', messagesError);
-        toast.error('Campanha criada, mas houve erro ao gerar mensagens.');
+        console.error('Erro ao criar mensagens do disparo:', messagesError);
+        toast.error('Disparo criado, mas houve erro ao gerar mensagens.');
       }
 
       // Redirecionar para a lista de disparos
       router.push(`/disparos`);
       router.refresh();
     } catch (error) {
-      console.error('Erro ao salvar campanha:', error);
-      toast.error('Erro ao salvar campanha. Tente novamente.');
+      console.error('Erro ao salvar disparo:', error);
+      toast.error('Erro ao salvar disparo. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -308,7 +308,7 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nome da Campanha</FormLabel>
+                  <FormLabel>Nome do Disparo</FormLabel>
                   <FormControl>
                     <Input placeholder="Ex: Promoção de Julho" {...field} />
                   </FormControl>
@@ -370,36 +370,36 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
             />
             
             <div>
-              <FormLabel>Grupos de Contatos</FormLabel>
+              <FormLabel>Listas de Contatos</FormLabel>
               <Card className="mt-2">
                 <CardContent className="pt-6">
-                  {contactGroups.length > 0 ? (
+                  {contactLists.length > 0 ? (
                     <div className="space-y-2">
                       <FormField
                         control={form.control}
-                        name="target_groups"
+                        name="target_lists"
                         render={() => (
                           <FormItem>
-                            {contactGroups.map((group) => (
+                            {contactLists.map((list) => (
                               <FormField
-                                key={group.name}
+                                key={list.name}
                                 control={form.control}
-                                name="target_groups"
+                                name="target_lists"
                                 render={({ field }) => {
                                   return (
                                     <FormItem
-                                      key={group.name}
+                                      key={list.name}
                                       className="flex flex-row items-start space-x-3 space-y-0 py-1"
                                     >
                                       <FormControl>
                                         <Checkbox
-                                          checked={field.value?.includes(group.name)}
+                                          checked={field.value?.includes(list.name)}
                                           onCheckedChange={(checked) => {
                                             return checked
-                                              ? field.onChange([...field.value || [], group.name])
+                                              ? field.onChange([...field.value || [], list.name])
                                               : field.onChange(
                                                   field.value?.filter(
-                                                    (value) => value !== group.name
+                                                    (value) => value !== list.name
                                                   )
                                                 )
                                           }}
@@ -407,7 +407,7 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
                                       </FormControl>
                                       <div className="space-y-1 leading-none">
                                         <FormLabel className="cursor-pointer">
-                                          {group.name} <span className="text-gray-500 text-sm">({group.count} contatos)</span>
+                                          {list.name} <span className="text-gray-500 text-sm">({list.count} contatos)</span>
                                         </FormLabel>
                                       </div>
                                     </FormItem>
@@ -421,7 +421,7 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
                       />
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500">Nenhum grupo de contatos disponível</p>
+                    <p className="text-sm text-gray-500">Nenhuma lista de contatos disponível</p>
                   )}
                 </CardContent>
               </Card>
@@ -472,7 +472,7 @@ export function CampaignForm({ userId, initialData, isEditing = false }: Campaig
               Cancelar
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Salvando...' : isEditing ? 'Atualizar Campanha' : 'Criar Campanha'}
+              {isLoading ? 'Salvando...' : isEditing ? 'Atualizar Disparo' : 'Criar Disparo'}
             </Button>
           </div>
         </form>
