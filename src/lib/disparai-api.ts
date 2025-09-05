@@ -27,7 +27,7 @@ export class DisparaiAPIClient {
 
   constructor(config: DisparaiAPIConfig) {
     this.config = config;
-    this.baseUrl = config.baseUrl || 'https://apibusiness1.megaapi.com.br';
+    this.baseUrl = config.baseUrl || 'https://teste8.megaapi.com.br';
   }
 
   private getHeaders() {
@@ -43,7 +43,7 @@ export class DisparaiAPIClient {
   async createInstance(instanceName: string): Promise<DisparaiAPIResponse> {
     try {
       const response = await axios.post(
-        `${this.baseUrl}/rest/instance/create`,
+        `${this.baseUrl}/rest/instance/init`,
         {
           instanceName,
           qr: true, // Gerar QR code automaticamente
@@ -66,7 +66,45 @@ export class DisparaiAPIClient {
   async generateQRCode(): Promise<DisparaiAPIResponse> {
     try {
       const response = await axios.get(
-        `${this.baseUrl}/rest/instance/connect/${this.config.instanceKey}`,
+        `${this.baseUrl}/rest/instance/qrcode/${this.config.instanceKey}`,
+        { headers: this.getHeaders() }
+      );
+      return response.data;
+    } catch (error: any) {
+      return {
+        error: true,
+        message: error.response?.data?.message || error.message,
+        data: error.response?.data
+      };
+    }
+  }
+
+  /**
+   * Gerar QR Code para uma instância específica (método alternativo)
+   */
+  async getQRCode(instanceKey: string): Promise<DisparaiAPIResponse> {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/rest/instance/qrcode/${instanceKey}`,
+        { headers: this.getHeaders() }
+      );
+      return response.data;
+    } catch (error: any) {
+      return {
+        error: true,
+        message: error.response?.data?.message || error.message,
+        data: error.response?.data
+      };
+    }
+  }
+
+  /**
+   * Listar todas as instâncias da conta
+   */
+  async listInstances(): Promise<DisparaiAPIResponse> {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/rest/instance/list`,
         { headers: this.getHeaders() }
       );
       return response.data;
@@ -99,12 +137,31 @@ export class DisparaiAPIClient {
   }
 
   /**
+   * Verificar status de uma instância específica
+   */
+  async getInstanceStatusByKey(instanceKey: string): Promise<DisparaiAPIResponse> {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/rest/instance/${instanceKey}`,
+        { headers: this.getHeaders() }
+      );
+      return response.data;
+    } catch (error: any) {
+      return {
+        error: true,
+        message: error.response?.data?.message || error.message,
+        data: error.response?.data
+      };
+    }
+  }
+
+  /**
    * Deletar instância
    */
   async deleteInstance(): Promise<DisparaiAPIResponse> {
     try {
       const response = await axios.delete(
-        `${this.baseUrl}/rest/instance/delete/${this.config.instanceKey}`,
+        `${this.baseUrl}/rest/instance/${this.config.instanceKey}`,
         { headers: this.getHeaders() }
       );
       return response.data;
@@ -123,10 +180,12 @@ export class DisparaiAPIClient {
   async sendTextMessage(to: string, message: string): Promise<DisparaiAPIResponse> {
     try {
       const response = await axios.post(
-        `${this.baseUrl}/rest/instance/sendMessage/${this.config.instanceKey}`,
+        `${this.baseUrl}/rest/sendMessage/${this.config.instanceKey}/text`,
         {
-          to,
-          message
+          messageData: {
+            to,
+            message
+          }
         },
         { headers: this.getHeaders() }
       );
@@ -151,12 +210,14 @@ export class DisparaiAPIClient {
   ): Promise<DisparaiAPIResponse> {
     try {
       const response = await axios.post(
-        `${this.baseUrl}/rest/instance/sendMedia/${this.config.instanceKey}`,
+        `${this.baseUrl}/rest/sendMessage/${this.config.instanceKey}/mediaUrl`,
         {
-          to,
-          mediaType,
-          mediaUrl,
-          caption
+          messageData: {
+            to,
+            url: mediaUrl,
+            type: mediaType,
+            caption
+          }
         },
         { headers: this.getHeaders() }
       );
@@ -172,6 +233,7 @@ export class DisparaiAPIClient {
 
   /**
    * Download de mídia recebida via webhook
+   * NOTA: Este endpoint pode não estar disponível na documentação oficial
    */
   async downloadMediaMessage(
     messageType: string,
@@ -221,7 +283,7 @@ export class DisparaiAPIClient {
   /**
    * Método simplificado para envio de mensagens (usado nas campanhas)
    */
-  async sendMessage(params: {
+  async sendSimpleMessage(params: {
     instanceKey: string;
     phoneNumber: string;
     message: string;
@@ -231,10 +293,12 @@ export class DisparaiAPIClient {
       const formattedPhone = formatPhoneToE164(params.phoneNumber);
       
       const response = await axios.post(
-        `${this.baseUrl}/rest/instance/sendMessage/${params.instanceKey}`,
+        `${this.baseUrl}/rest/sendMessage/${params.instanceKey}/text`,
         {
-          to: formattedPhone,
-          message: params.message
+          messageData: {
+            to: formattedPhone,
+            message: params.message
+          }
         },
         { headers: this.getHeaders() }
       );

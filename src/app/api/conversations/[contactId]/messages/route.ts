@@ -110,7 +110,7 @@ export async function POST(
       apiToken: connection.api_key
     });
 
-    const sendResult = await disparaiClient.sendMessage({
+    const sendResult = await disparaiClient.sendSimpleMessage({
       instanceKey: connection.instance_id,
       phoneNumber: contact.phone,
       message: message

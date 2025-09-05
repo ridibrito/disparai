@@ -260,26 +260,6 @@ export default function ConnectionsWithTabs() {
           </p>
         </div>
 
-        {/* Debug e Teste */}
-        <div className="mb-4 p-4 bg-gray-100 rounded-lg">
-          <p className="text-sm mb-2">Debug: Aba ativa = <strong>{activeTab}</strong></p>
-          <div className="flex gap-2">
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={() => setActiveTab('disparai')}
-            >
-              Forçar API Disparai
-            </Button>
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={() => setActiveTab('cloud')}
-            >
-              Forçar Cloud API
-            </Button>
-          </div>
-        </div>
 
         {/* Tabs */}
         <div className="space-y-6">

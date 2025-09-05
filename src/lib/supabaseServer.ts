@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { createServerClient as createSupabaseServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import type { Database } from './supabase';
 
 export const createServerClient = async () => {
@@ -24,6 +25,20 @@ export const createServerClient = async () => {
           } catch {}
         },
       },
+    }
+  );
+};
+
+// Cliente com service role para bypass do RLS
+export const createServerClientWithServiceRole = () => {
+  return createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
     }
   );
 };

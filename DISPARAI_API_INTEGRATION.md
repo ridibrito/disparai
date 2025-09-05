@@ -23,13 +23,13 @@ Para usar a API Disparai, você precisa de:
 
 #### Status da Instância
 ```
-GET https://apibusiness1.megaapi.com.br/rest/instance/{instance_key}
+GET https://teste8.megaapi.com.br/rest/instance/{instance_key}
 Authorization: Bearer {token}
 ```
 
 #### Envio de Mensagem de Texto
 ```
-POST https://apibusiness1.megaapi.com.br/rest/instance/sendMessage/{instance_key}
+POST https://teste8.megaapi.com.br/rest/instance/sendMessage/{instance_key}
 Authorization: Bearer {token}
 Content-Type: application/json
 
@@ -41,7 +41,7 @@ Content-Type: application/json
 
 #### Envio de Mídia
 ```
-POST https://apibusiness1.megaapi.com.br/rest/instance/sendMedia/{instance_key}
+POST https://teste8.megaapi.com.br/rest/instance/sendMedia/{instance_key}
 Authorization: Bearer {token}
 Content-Type: application/json
 
@@ -55,7 +55,7 @@ Content-Type: application/json
 
 #### Download de Mídia
 ```
-POST https://apibusiness1.megaapi.com.br/rest/instance/downloadMediaMessage/{instance_key}
+POST https://teste8.megaapi.com.br/rest/instance/downloadMediaMessage/{instance_key}
 Authorization: Bearer {token}
 Content-Type: application/json
 
@@ -265,9 +265,18 @@ As credenciais são armazenadas de forma segura no banco de dados com:
 
 ## 📚 Recursos Adicionais
 
-- [Documentação Oficial API Disparai](https://apibusiness1.megaapi.com.br/docs/)
+- [Documentação Oficial API Disparai (Servidor de Testes)](https://teste8.megaapi.com.br/docs/#/)
 - [Painel de Controle Disparai](https://painel.megaapi.com.br/)
 - [Suporte Técnico](https://suporte.megaapi.com.br/)
+
+## 🧪 Servidor de Testes
+
+O projeto está configurado para usar o servidor de testes da MegaAPI:
+- **Host**: https://teste8.megaapi.com.br/
+- **Swagger**: https://teste8.megaapi.com.br/docs/#/
+- **Status**: ✅ Conectado e funcionando
+
+Para usar o servidor de produção, altere a URL base no arquivo `src/lib/disparai-api.ts`.
 
 ## 🔄 Atualizações
 

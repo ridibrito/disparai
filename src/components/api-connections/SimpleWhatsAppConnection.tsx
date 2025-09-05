@@ -6,68 +6,81 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, RefreshCw, CheckCircle, AlertCircle, Smartphone, Zap } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+// Removido import do Supabase - não precisamos mais
 
 interface SimpleWhatsAppConnectionProps {
   userId: string;
   userName: string;
+  qrCodeData?: string | null;
   onConnected?: () => void;
   onError?: (error: string) => void;
 }
 
 interface ConnectionData {
-  connectionId: string;
-  instanceKey: string;
+  connectionId?: string;
+  instanceKey?: string;
+  instance_key?: string;
   status: string;
   qrCode?: string;
-  nextStep: string;
+  nextStep?: string;
 }
 
 export default function SimpleWhatsAppConnection({ 
   userId, 
   userName, 
+  qrCodeData,
   onConnected, 
   onError 
 }: SimpleWhatsAppConnectionProps) {
   const [connectionData, setConnectionData] = useState<ConnectionData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false); // Não mostrar loading inicial
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
-  const [step, setStep] = useState<'loading' | 'qr' | 'connected' | 'error'>('loading');
+  const [step, setStep] = useState<'loading' | 'qr' | 'connected' | 'error'>('qr'); // Começar com QR
 
-  // Criar instância automaticamente quando o componente montar
+  // Processar QR Code quando recebido
   useEffect(() => {
-    createInstanceAutomatically();
-  }, []);
+    if (qrCodeData) {
+      console.log('📱 QR Code recebido no SimpleWhatsAppConnection');
+      // Se recebeu QR Code, pular para a etapa de QR
+      setConnectionData({
+        connectionId: 'temp',
+        instanceKey: 'disparai',
+        status: 'qr_code',
+        qrCode: qrCodeData,
+        nextStep: 'qr'
+      });
+      setStep('qr');
+      setIsLoading(false);
+    }
+    // Removido: createInstanceAutomatically() - agora a criação é feita pelo botão
+  }, [qrCodeData]);
 
   const createInstanceAutomatically = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/auth/auto-setup', {
+      // Por enquanto, usar um organization_id padrão
+      // TODO: Implementar busca do organization_id do usuário
+      const response = await fetch('/api/create-whatsapp-instance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId,
-          userName
+          organizationId: 'default-org-id' // Temporário
         })
       });
 
       const result = await response.json();
 
       if (result.success) {
-        setConnectionData(result.data);
+        setConnectionData({
+          instance_key: result.instance.instance_key,
+          status: result.instance.status,
+          qrCode: result.instance.qr_code
+        });
         
-        if (result.data.status === 'pending_server') {
-          setStep('error');
-          toast.error('Servidor temporariamente indisponível. Tente novamente em alguns minutos.');
-        } else if (result.data.qrCode) {
-          setStep('qr');
-          toast.success('Instância criada! Escaneie o QR Code para conectar.');
-        } else {
-          setStep('qr');
-          // Gerar QR Code se não veio automaticamente
-          generateQRCode();
-        }
+        setStep('qr');
+        toast.success('Instância criada! Escaneie o QR Code para conectar.');
       } else {
-        throw new Error(result.message);
+        throw new Error(result.error || 'Erro ao criar instância');
       }
     } catch (error: any) {
       console.error('Erro ao criar instância:', error);
@@ -102,32 +115,46 @@ export default function SimpleWhatsAppConnection({
     }
   };
 
-  // Verificar status da conexão
+  // Verificar status da conexão diretamente no MegaAPI
   const checkConnectionStatus = async () => {
-    if (!connectionData) return;
+    // Usar instanceKey fixo "disparai" já que sabemos que é essa instância
+    const instanceKey = 'disparai';
     
     setIsCheckingStatus(true);
     try {
-      const response = await fetch('/api/disparai/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          instanceKey: connectionData.instanceKey, 
-          userId 
-        })
+      // Chamar diretamente o endpoint do MegaAPI
+      const response = await fetch(`https://teste8.megaapi.com.br/rest/instance/${instanceKey}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs',
+          'Content-Type': 'application/json'
+        }
       });
       
       const result = await response.json();
 
-      if (result.success) {
-        if (result.data.status === 'connected') {
+      if (!result.error && result.instance) {
+        if (result.instance.status === 'connected') {
           setStep('connected');
           toast.success('WhatsApp conectado com sucesso!');
           onConnected?.();
+        } else if (result.instance.status === 'disconnected') {
+          // Instância desconectada - continuar aguardando
+          console.log('Instância desconectada, aguardando conexão...');
         }
+      } else {
+        console.log('Erro ao verificar status da instância:', result.message);
+        setStep('error');
+        setConnectionData(null);
+        toast.error('Erro ao verificar status da instância: ' + result.message);
+        return;
       }
     } catch (error: any) {
       console.error('Erro ao verificar status:', error);
+      setStep('error');
+      setConnectionData(null);
+      toast.error('Erro ao verificar status da instância');
+      return;
     } finally {
       setIsCheckingStatus(false);
     }
@@ -135,11 +162,19 @@ export default function SimpleWhatsAppConnection({
 
   // Verificar status automaticamente a cada 3 segundos quando aguardando conexão
   useEffect(() => {
-    if (step === 'qr' && connectionData) {
-      const interval = setInterval(checkConnectionStatus, 3000);
+    if (step === 'qr') {
+      const interval = setInterval(async () => {
+        // Verificar se ainda devemos continuar verificando
+        if (step !== 'qr') {
+          clearInterval(interval);
+          return;
+        }
+        
+        await checkConnectionStatus();
+      }, 3000);
       return () => clearInterval(interval);
     }
-  }, [step, connectionData]);
+  }, [step]);
 
   if (step === 'loading') {
     return (

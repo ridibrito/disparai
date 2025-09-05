@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
           }
 
           // Enviar mensagem via API Disparai
-          const sendResult = await disparaiClient.sendMessage({
+          const sendResult = await disparaiClient.sendSimpleMessage({
             instanceKey: campaign.api_connections.instance_id,
             phoneNumber: message.contacts.phone,
             message: personalizedMessage

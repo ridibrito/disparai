@@ -82,27 +82,54 @@ export type Tables = {
     Row: {
       id: string;
       user_id: string;
+      organization_id: string;
       type: string;
+      name: string | null;
+      instance_id: string | null;
       api_key: string;
       api_secret: string;
+      is_active: boolean | null;
+      status: string | null;
+      description: string | null;
+      webhook_url: string | null;
+      phone_number_id: string | null;
+      provider: string | null;
       created_at: string;
       updated_at: string;
     };
     Insert: {
       id?: string;
       user_id: string;
+      organization_id?: string;
       type: string;
+      name?: string | null;
+      instance_id?: string | null;
       api_key: string;
       api_secret: string;
+      is_active?: boolean | null;
+      status?: string | null;
+      description?: string | null;
+      webhook_url?: string | null;
+      phone_number_id?: string | null;
+      provider?: string | null;
       created_at?: string;
       updated_at?: string;
     };
     Update: {
       id?: string;
       user_id?: string;
+      organization_id?: string;
       type?: string;
+      name?: string | null;
+      instance_id?: string | null;
       api_key?: string;
       api_secret?: string;
+      is_active?: boolean | null;
+      status?: string | null;
+      description?: string | null;
+      webhook_url?: string | null;
+      phone_number_id?: string | null;
+      provider?: string | null;
       created_at?: string;
       updated_at?: string;
     };
@@ -425,6 +452,14 @@ let supabaseClientInstance: SupabaseClient<Database> | null = null;
 
 // Função para criar o cliente do Supabase no lado do cliente (singleton)
 export const createClientComponentClient = (): SupabaseClient<Database> => {
+  if (typeof window === 'undefined') {
+    // No servidor, sempre criar nova instância
+    return createBrowserClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://temp.supabase.co',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'temp_anon_key'
+    );
+  }
+  
   if (!supabaseClientInstance) {
     supabaseClientInstance = createBrowserClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://temp.supabase.co',
@@ -440,20 +475,32 @@ export const supabaseClient = createClientComponentClient();
 // Função para criar o cliente do Supabase no lado do servidor (com cookies)
 // Nota: utilitário de servidor foi movido para '@/lib/supabaseServer'
 
-// Cliente admin para operações que precisam contornar RLS
-export const supabaseAdmin = createClient(
-  env.supabase.url || 'https://temp.supabase.co', 
-  env.supabase.serviceRoleKey || 'temp_service_role_key', 
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
+// Cliente admin para operações que precisam contornar RLS (apenas no servidor)
+let supabaseAdminInstance: SupabaseClient<Database> | null = null;
+export const supabaseAdmin = (() => {
+  if (typeof window === 'undefined' && !supabaseAdminInstance) {
+    supabaseAdminInstance = createClient(
+      env.supabase.url || 'https://temp.supabase.co', 
+      env.supabase.serviceRoleKey || 'temp_service_role_key', 
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
   }
-);
+  return supabaseAdminInstance;
+})();
 
-// Cliente normal para operações do usuário
-export const supabase = createClient(
-  env.supabase.url || 'https://temp.supabase.co', 
-  env.supabase.anonKey || 'temp_anon_key'
-);
+// Cliente normal para operações do usuário (apenas no servidor)
+let supabaseServerInstance: SupabaseClient<Database> | null = null;
+export const supabase = (() => {
+  if (typeof window === 'undefined' && !supabaseServerInstance) {
+    supabaseServerInstance = createClient(
+      env.supabase.url || 'https://temp.supabase.co', 
+      env.supabase.anonKey || 'temp_anon_key'
+    );
+  }
+  return supabaseServerInstance;
+})();
