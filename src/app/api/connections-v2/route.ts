@@ -7,8 +7,7 @@ const supabase = createClient(
 );
 
 export async function GET() {
-  try {
-    // Primeiro, tentar buscar apenas api_connections
+  try {    // Primeiro, tentar buscar apenas api_connections
     const { data, error } = await supabase
       .from("api_connections")
       .select("*")
@@ -35,13 +34,31 @@ export async function POST(req: Request) {
     const payload = await req.json();
     console.log('📥 Payload recebido:', payload);
     
+    // Verificar se o payload tem user_id, se não tiver, tentar obter do token
+    if (!payload.user_id) {
+      // Buscar usuário logado (isso pode precisar ser ajustado dependendo da autenticação)
+      console.log('⚠️ user_id não fornecido no payload');
+    }
+    
     const { data, error } = await supabase
       .from("api_connections")
-      .upsert(payload);
+      .upsert({
+        ...payload,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
       
     if (error) {
       console.error('❌ Erro ao salvar conexão:', error);
-      return NextResponse.json({ ok: false, error }, { status: 500 });
+      return NextResponse.json({ 
+        ok: false, 
+        error: {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        }
+      }, { status: 500 });
     }
     
     console.log('✅ Conexão salva:', data);

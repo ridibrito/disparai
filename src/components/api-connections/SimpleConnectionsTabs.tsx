@@ -67,42 +67,92 @@ export default function SimpleConnectionsTabs() {
     setProgressMessage(message);
   };
 
-  // Função para salvar conexão quando conectar com QR Code
-  const saveConnectionAfterQR = async (instanceKey: string) => {
+  // Função para verificar status da instância periodicamente
+  const checkInstanceStatus = async (instanceKey: string) => {
     try {
       const megaApiToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
       
-      const requestBody = {
-        name: `WhatsApp Disparai - ${instanceKey}`,
-        type: 'whatsapp_disparai',
-        instanceId: instanceKey,
-        apiKey: megaApiToken,
-        apiSecret: megaApiToken
-      };
-      
-      console.log('📤 Salvando conexão após conectar QR Code:', requestBody);
-      
-      const saveResponse = await fetch('/api/connections-v2', {
-        method: 'POST',
+      const response = await fetch(`https://teste8.megaapi.com.br/rest/instance/${instanceKey}`, {
+        method: 'GET',
         headers: {
+          'Authorization': `Bearer ${megaApiToken}`,
           'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
+        }
       });
 
-      if (saveResponse.ok) {
-        const saveResult = await saveResponse.json();
-        console.log('✅ Conexão salva após conectar:', saveResult);
-        toast.success('Conexão salva com sucesso!');
-        await loadConnections();
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📊 Status da instância:', data.instance?.status);
+        
+        if (data.instance?.status === 'connected') {
+          console.log('✅ WhatsApp conectado! Fechando QR Code...');
+          
+          // Atualizar status no backend
+          await updateConnectionStatusAfterQR(instanceKey);
+          
+          // Fechar modal do QR Code
+          setShowQRModal(false);
+          setQrCodeData(null);
+          setCurrentInstanceKey(null);
+          
+          toast.success('🎉 WhatsApp conectado automaticamente!');
+          return true; // Conectado
+        }
+      }
+      
+      return false; // Ainda não conectado
+    } catch (error) {
+      console.error('❌ Erro ao verificar status:', error);
+      return false;
+    }
+  };
+
+  // Função para iniciar verificação periódica do status
+  const startStatusPolling = (instanceKey: string) => {
+    console.log('🔄 Iniciando verificação periódica para:', instanceKey);
+    
+    const interval = setInterval(async () => {
+      const isConnected = await checkInstanceStatus(instanceKey);
+      
+      if (isConnected) {
+        clearInterval(interval);
+        console.log('✅ Verificação periódica finalizada - WhatsApp conectado');
+      }
+    }, 3000); // Verificar a cada 3 segundos
+
+    // Limpar intervalo após 5 minutos (timeout de segurança)
+    setTimeout(() => {
+      clearInterval(interval);
+      console.log('⏰ Timeout da verificação periódica');
+    }, 300000); // 5 minutos
+  };
+
+  // Função para atualizar status da conexão após conectar com QR Code
+  const updateConnectionStatusAfterQR = async (instanceKey: string) => {
+    try {
+      console.log('🔄 Atualizando status da instância:', instanceKey);
+      
+      const response = await fetch('/api/update-instance-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instance_key: instanceKey,
+          status: 'ativo'
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.ok) {
+        console.log('✅ Status da instância atualizado:', result);
+        await loadConnections(); // Recarregar lista
       } else {
-        const errorText = await saveResponse.text();
-        console.error('❌ Erro ao salvar conexão:', errorText);
-        toast.error('Erro ao salvar conexão');
+        console.error('❌ Erro ao atualizar status:', result.error);
       }
     } catch (error) {
-      console.error('❌ Erro ao salvar conexão:', error);
-      toast.error('Erro ao salvar conexão');
+      console.error('❌ Erro ao atualizar status:', error);
     }
   };
 
@@ -290,7 +340,11 @@ export default function SimpleConnectionsTabs() {
           console.log('📱 QR Code recebido com sucesso!');
           setQrCodeData(result.qrcode);
           setShowQRModal(true);
+          setCurrentInstanceKey(instanceKey);
           toast.success('📱 QR Code gerado! Escaneie com seu WhatsApp');
+          
+          // Iniciar verificação periódica do status
+          startStatusPolling(instanceKey);
         } else {
           console.log('❌ QR Code não encontrado na resposta:', result);
           toast.error('❌ QR Code não disponível');
@@ -372,15 +426,41 @@ export default function SimpleConnectionsTabs() {
     try {
       console.log('🔄 loadConnections chamado');
       
-      const response = await fetch('/api/connections-v2');
+      // Buscar conexões da tabela api_connections
+      const connectionsResponse = await fetch('/api/connections-v2');
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!connectionsResponse.ok) {
+        throw new Error(`HTTP error! status: ${connectionsResponse.status}`);
       }
       
-      const data = await response.json();
-      setConnections(data.data || []);
-      console.log('📋 Conexões carregadas:', data.data?.length || 0);
+      const connectionsData = await connectionsResponse.json();
+      let allConnections = connectionsData.data || [];
+      
+      // Buscar instâncias WhatsApp da tabela whatsapp_instances
+      const instancesResponse = await fetch('/api/list-instances');
+      
+      if (instancesResponse.ok) {
+        const instancesData = await instancesResponse.json();
+        console.log('📱 Instâncias WhatsApp encontradas:', instancesData.instances?.length || 0);
+        
+        // Converter instâncias WhatsApp para formato de conexões
+        const whatsappConnections = instancesData.instances?.map((instance: any) => ({
+          id: instance.id,
+          name: `WhatsApp Disparai - ${instance.instance_key}`,
+          type: 'whatsapp_disparai',
+          status: instance.status === 'ativo' ? 'connected' : 'disconnected',
+          instance_key: instance.instance_key,
+          created_at: instance.created_at,
+          updated_at: instance.updated_at,
+          is_whatsapp_instance: true // Flag para identificar que veio da tabela whatsapp_instances
+        })) || [];
+        
+        // Combinar conexões existentes com instâncias WhatsApp
+        allConnections = [...allConnections, ...whatsappConnections];
+      }
+      
+      setConnections(allConnections);
+      console.log('📋 Total de conexões carregadas:', allConnections.length);
       
     } catch (error) {
       console.error('Error loading connections:', error);
@@ -681,30 +761,7 @@ export default function SimpleConnectionsTabs() {
                   Conexão automática e simplificada. Apenas escaneie o QR Code para conectar.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <h4 className="font-medium text-green-900">Vantagens:</h4>
-                      <ul className="text-sm text-green-800 space-y-1">
-                        <li>• Conexão automática e segura</li>
-                        <li>• Mensagens ilimitadas</li>
-                        <li>• Envio de mídia completo</li>
-                        <li>• Suporte 24/7</li>
-                      </ul>
-                    </div>
-                    <div className="space-y-2">
-                      <h4 className="font-medium text-green-900">Como funciona:</h4>
-                      <ul className="text-sm text-green-800 space-y-1">
-                        <li>• Apenas escaneie um QR Code</li>
-                        <li>• Pronto para usar em segundos</li>
-                        <li>• Sem configurações complexas</li>
-                        <li>• Ideal para usuários leigos</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
+             
             </Card>
 
             {/* Conexão Disparai */}
@@ -1248,29 +1305,17 @@ export default function SimpleConnectionsTabs() {
                 <p>5. Escaneie este QR Code</p>
               </div>
               
-              <div className="flex gap-2 w-full">
+              <div className="text-center">
+                <p className="text-sm text-gray-600 mb-4">
+                  ⏳ O modal fechará automaticamente quando o WhatsApp conectar
+                </p>
                 <Button 
-                  variant="outline" 
                   onClick={handleCloseQRModal}
-                  className="flex-1"
+                  variant="outline"
+                  className="w-full"
                 >
                   <X className="w-4 h-4 mr-2" />
                   Fechar
-                </Button>
-                <Button 
-                  onClick={async () => {
-                    setShowQRModal(false);
-                    if (currentInstanceKey) {
-                      await saveConnectionAfterQR(currentInstanceKey);
-                    } else {
-                      toast.error('Erro: InstanceKey não encontrado');
-                    }
-                    setShowDisparaiConnection(true);
-                  }}
-                  className="flex-1 bg-green-600 hover:bg-green-700"
-                >
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  Conectado
                 </Button>
               </div>
             </div>

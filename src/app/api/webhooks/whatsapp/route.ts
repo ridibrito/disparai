@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase';
+import { createServerClient } from '@/lib/supabaseServer';
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('📦 Dados do webhook:', JSON.stringify(body, null, 2));
     
-    const supabase = createClient();
+    const supabase = await createServerClient();
     
     // Verificar se é uma notificação de conexão
     if (body.type === 'connection' || body.type === 'status') {
@@ -18,11 +18,19 @@ export async function POST(request: NextRequest) {
       console.log(`🔌 Status da conexão: ${status} para instância: ${instanceKey}`);
       
       if (instanceKey) {
+        // Mapear status do MegaAPI para nosso status
+        let mappedStatus = 'pendente';
+        if (status === 'connected') {
+          mappedStatus = 'ativo';
+        } else if (status === 'disconnected') {
+          mappedStatus = 'desconectado';
+        }
+        
         // Atualizar status da instância no banco
         const { error } = await supabase
           .from('whatsapp_instances')
           .update({ 
-            status: status === 'connected' ? 'ativo' : 'desconectado',
+            status: mappedStatus,
             updated_at: new Date().toISOString()
           })
           .eq('instance_key', instanceKey);
@@ -30,7 +38,55 @@ export async function POST(request: NextRequest) {
         if (error) {
           console.error('❌ Erro ao atualizar status da instância:', error);
         } else {
-          console.log('✅ Status da instância atualizado no banco de dados');
+          console.log(`✅ Status da instância atualizado para: ${mappedStatus}`);
+          
+          // Se conectou, criar conexão na tabela api_connections se não existir
+          if (mappedStatus === 'ativo') {
+            const { data: existingConnection } = await supabase
+              .from('api_connections')
+              .select('*')
+              .eq('instance_id', instanceKey)
+              .single();
+            
+            if (!existingConnection) {
+              // Buscar organization_id da instância
+              const { data: instance } = await supabase
+                .from('whatsapp_instances')
+                .select('organization_id')
+                .eq('instance_key', instanceKey)
+                .single();
+              
+              if (instance) {
+                // Buscar user_id da organização
+                const { data: user } = await supabase
+                  .from('users')
+                  .select('id')
+                  .eq('organization_id', instance.organization_id)
+                  .single();
+                
+                if (user) {
+                  const { error: connectionError } = await supabase
+                    .from('api_connections')
+                    .insert({
+                      user_id: user.id,
+                      organization_id: instance.organization_id,
+                      name: `WhatsApp Disparai - ${instanceKey}`,
+                      type: 'whatsapp_disparai',
+                      instance_id: instanceKey,
+                      api_key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pciI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs',
+                      status: 'active',
+                      is_active: true
+                    });
+                  
+                  if (connectionError) {
+                    console.error('❌ Erro ao criar conexão:', connectionError);
+                  } else {
+                    console.log('✅ Conexão criada automaticamente');
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
