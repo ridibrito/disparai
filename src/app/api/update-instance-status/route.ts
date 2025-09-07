@@ -20,16 +20,40 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    // Atualizar status na tabela whatsapp_instances
-    const { data: updatedInstance, error: updateError } = await supabaseAdmin
-      .from('whatsapp_instances')
-      .update({ 
-        status: status,
-        updated_at: new Date().toISOString()
-      })
-      .eq('instance_key', instanceKey)
-      .select()
-      .single();
+    // Determinar qual tabela atualizar baseado no status
+    let updatedInstance = null;
+    let updateError = null;
+
+    if (status === 'active') {
+      // Status 'active' é para api_connections (conectado via QR Code)
+      const { data, error } = await supabaseAdmin
+        .from('api_connections')
+        .update({ 
+          status: 'active',
+          is_active: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('instance_id', instanceKey)
+        .select()
+        .single();
+      
+      updatedInstance = data;
+      updateError = error;
+    } else {
+      // Outros status são para whatsapp_instances
+      const { data, error } = await supabaseAdmin
+        .from('whatsapp_instances')
+        .update({ 
+          status: status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('instance_key', instanceKey)
+        .select()
+        .single();
+      
+      updatedInstance = data;
+      updateError = error;
+    }
 
     if (updateError) {
       console.error('❌ Erro ao atualizar status:', updateError);

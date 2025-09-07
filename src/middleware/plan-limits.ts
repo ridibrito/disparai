@@ -14,8 +14,8 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Lógica de redirecionamento para o login, se o usuário não estiver autenticado
-  if (!session && pathname !== '/auth/login') {
-    return NextResponse.redirect(new URL('/auth/login', req.url));
+  if (!session && pathname !== '/login') {
+    return NextResponse.redirect(new URL('/login', req.url));
   }
 
   // Se a rota for de adição de contatos, chame o seu middleware de verificação

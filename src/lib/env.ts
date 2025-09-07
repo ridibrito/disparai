@@ -35,9 +35,19 @@ const envSchema = z.object({
   }),
 
   // APP
-  app: z.object({
+    app: z.object({
     url: z.string().url().default('http://localhost:3000'),
     timezone: z.string().default('America/Sao_Paulo'),
+  }),
+
+  // RD STATION
+    rdstation: z.object({
+    accessToken: z.string().min(1).optional(),
+  }),
+
+  megaApi: z.object({
+    host: z.string().min(1).optional(),
+    token: z.string().min(1).optional(),
   }),
 });
 
@@ -68,5 +78,12 @@ export const env = envSchema.parse({
   app: {
     url: process.env.NEXT_PUBLIC_APP_URL,
     timezone: process.env.TZ,
+  },
+  rdstation: {
+    accessToken: process.env.RDSTATION_ACCESS_TOKEN,
+  },
+  megaApi: {
+    host: process.env.MEGA_API_HOST,
+    token: process.env.MEGA_API_TOKEN,
   },
 });

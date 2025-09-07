@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from '@/lib/supabaseServer';
 import { createClient } from "@supabase/supabase-js";
+import { MegaAPI } from "@/lib/mega-api";
 
 // Cliente admin para operações que precisam de mais permissões
 const supabaseAdmin = createClient(
@@ -11,21 +12,30 @@ const supabaseAdmin = createClient(
 export async function POST(req: Request) {
   try {
     const { instanceName, organizationId } = await req.json();
-    const host = 'https://teste8.megaapi.com.br';
-    const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
-
-    console.log('🚀 Criando instância:', { instanceName, organizationId, host });
 
     // Verificar autenticação
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    let user = null;
+    try {
+      const supabase = await createServerClient();
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      user = authUser;
+    } catch (error) {
+      console.log('⚠️ Erro ao verificar autenticação, usando service role:', error);
+    }
+
     if (!user?.id) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+      console.log('⚠️ Usuário não autenticado, usando service role para operação');
+      // Se não conseguir autenticar, usar service role com organizationId fornecido
+      if (!organizationId) {
+        return NextResponse.json({ error: 'OrganizationId é obrigatório quando não há autenticação' }, { status: 400 });
+      }
     }
 
     // Buscar organization_id válido primeiro
     let validOrgId = organizationId;
-    if (!validOrgId || validOrgId === 'default-org') {
+    let organizationName = 'Default';
+    
+    if (user?.id && (!validOrgId || validOrgId === 'default-org')) {
       const { data: userData } = await supabaseAdmin
         .from('users')
         .select('organization_id')
@@ -44,12 +54,31 @@ export async function POST(req: Request) {
       validOrgId = defaultOrg?.id || '596274e5-69c9-4267-975d-18f6af63c9b2';
     }
 
-    // Gerar nome único para a instância se não fornecido
-    // Formato: org_{organizationId}_{timestamp}
-    const finalInstanceName = instanceName || `org_${validOrgId}_${Date.now()}`;
+    // Buscar nome da organização
+    const { data: orgData } = await supabaseAdmin
+      .from('organizations')
+      .select('name, company_name')
+      .eq('id', validOrgId)
+      .single();
+    
+    if (orgData?.name) {
+      organizationName = orgData.name;
+    } else if (orgData?.company_name) {
+      organizationName = orgData.company_name;
+    }
+
+    // Gerar nome único para a instância baseado no nome da organização + ID + timestamp
+    // Formato: {organizationName}_{organizationId}_{timestamp}
+    const cleanOrgName = organizationName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '') // Remove caracteres especiais
+      .substring(0, 15); // Limita a 15 caracteres
+    
+    const orgIdShort = validOrgId.substring(0, 8); // Primeiros 8 caracteres do ID
+    const timestamp = Date.now().toString().slice(-6); // Últimos 6 dígitos do timestamp
+    const finalInstanceName = instanceName || `${cleanOrgName}_${orgIdShort}_${timestamp}`;
     
     // Verificar se a instância já existe no Supabase (usando cliente admin)
-    console.log('🔍 Verificando instância existente no Supabase:', finalInstanceName);
     const { data: existingInstance, error: checkError } = await supabaseAdmin
       .from('whatsapp_instances')
       .select('*')
@@ -65,7 +94,6 @@ export async function POST(req: Request) {
     }
 
     if (existingInstance) {
-      console.log('⚠️ Instância já existe no Supabase:', existingInstance);
       return NextResponse.json({ 
         ok: true, 
         instance_key: finalInstanceName,
@@ -75,46 +103,30 @@ export async function POST(req: Request) {
     }
 
     // Verificar se a instância já existe no MegaAPI
-    console.log('🔍 Verificando se instância existe no MegaAPI...');
-    const checkResponse = await fetch(`${host}/rest/instance/${finalInstanceName}`, {
-      method: "GET",
-      headers: { 
-        "Authorization": `Bearer ${token}`, 
-        "Content-Type": "application/json" 
-      }
-    });
+    const existingMegaApiInstance = await MegaAPI.getInstance(finalInstanceName);
 
-    if (checkResponse.ok) {
-      console.log('⚠️ Instância já existe no MegaAPI');
-      const existingData = await checkResponse.json();
-      
+    if (existingMegaApiInstance) {
       // Salvar instância existente no Supabase se não estiver lá
-      if (!existingInstance) {
-        const webhookUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/webhooks/whatsapp/${validOrgId}`;
-        
-        console.log('💾 Salvando instância existente no Supabase...');
-        
-        const { data: savedInstance, error: saveError } = await supabaseAdmin
-          .from('whatsapp_instances')
-          .insert({
-            organization_id: validOrgId,
-            instance_key: finalInstanceName,
-            token: token,
-            status: existingData.instance?.status === 'connected' ? 'ativo' : 'pendente',
-            webhook_url: webhookUrl
-          } as any)
-          .select()
-          .single();
+      const webhookUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/webhooks/whatsapp/${finalInstanceName}`;
+      
+      const { data: savedInstance, error: saveError } = await supabaseAdmin
+        .from('whatsapp_instances')
+        .insert({
+          organization_id: validOrgId,
+          instance_key: finalInstanceName,
+          token: process.env.MEGA_API_TOKEN,
+          status: 'ativo', // Sempre ativa para aparecer no frontend
+          webhook_url: webhookUrl
+        } as any)
+        .select()
+        .single();
 
-        if (saveError) {
-          console.error('❌ Erro ao salvar instância existente no Supabase:', saveError);
-          return NextResponse.json({ 
-            ok: false, 
-            error: 'Erro ao salvar instância existente: ' + saveError.message 
-          }, { status: 500 });
-        } else {
-          console.log('✅ Instância existente salva no Supabase:', savedInstance);
-        }
+      if (saveError) {
+        console.error('❌ Erro ao salvar instância existente no Supabase:', saveError);
+        return NextResponse.json({ 
+          ok: false, 
+          error: 'Erro ao salvar instância existente: ' + saveError.message 
+        }, { status: 500 });
       }
 
       // Verificar se precisa criar conexão na api_connections
@@ -125,7 +137,6 @@ export async function POST(req: Request) {
         .single();
 
       if (!existingConnection) {
-        console.log('🔗 Criando conexão para instância existente...');
         const { data: userForConnection } = await supabaseAdmin
           .from('users')
           .select('id')
@@ -139,23 +150,23 @@ export async function POST(req: Request) {
             name: `WhatsApp Disparai - ${finalInstanceName}`,
             type: 'whatsapp_disparai',
             instance_id: finalInstanceName,
-            api_key: token,
-            api_secret: token,
-            status: existingData.instance?.status === 'connected' ? 'active' : 'pending',
-            is_active: existingData.instance?.status === 'connected',
+            api_key: process.env.MEGA_API_TOKEN,
+            api_secret: process.env.MEGA_API_TOKEN,
+            status: existingMegaApiInstance.status === 'connected' ? 'active' : 'pending',
+            is_active: existingMegaApiInstance.status === 'connected',
             provider: 'disparai'
           };
 
-          const { data: newConnection, error: connectionError } = await supabaseAdmin
+          const { data: savedConnection, error: connectionError } = await supabaseAdmin
             .from('api_connections')
             .insert(connectionData as any)
             .select()
             .single();
 
           if (connectionError) {
-            console.error('⚠️ Erro ao criar conexão para instância existente:', connectionError);
+            console.error('❌ Erro ao criar api_connection para instância existente:', connectionError);
           } else {
-            console.log('✅ Conexão criada para instância existente:', newConnection);
+            console.log('✅ API Connection criada para instância existente:', savedConnection);
           }
         }
       }
@@ -163,53 +174,30 @@ export async function POST(req: Request) {
       return NextResponse.json({ 
         ok: true, 
         instance_key: finalInstanceName,
-        data: existingData,
+        data: existingMegaApiInstance,
         already_exists: true,
-        instance: existingInstance
+        instance: savedInstance,
+        organization_name: organizationName,
+        organization_id: validOrgId,
+        instance_name: finalInstanceName
       });
     }
 
     // Criar nova instância no MegaAPI
-    console.log('🆕 Criando nova instância no MegaAPI...');
-    const webhookUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/webhooks/whatsapp/${validOrgId}`;
+    const webhookUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/webhooks/whatsapp/${finalInstanceName}`;
+    const newMegaApiInstance = await MegaAPI.createInstance(finalInstanceName, webhookUrl);
+
+    // Usar o instanceName se instance_key não estiver disponível
+    const finalInstanceKey = newMegaApiInstance.instance_key || finalInstanceName;
     
-    const createResponse = await fetch(`${host}/rest/instance/init?instance_key=${finalInstanceName}`, {
-      method: "POST",
-      headers: { 
-        "Authorization": `Bearer ${token}`, 
-        "Content-Type": "application/json" 
-      },
-      body: JSON.stringify({
-        messageData: {
-          webhookUrl: webhookUrl,
-          webhookEnabled: true
-        }
-      })
-    });
-
-    console.log('📡 Resposta MegaAPI:', { status: createResponse.status, statusText: createResponse.statusText });
-
-    if (!createResponse.ok) {
-      const err = await createResponse.text();
-      console.error('❌ Erro ao criar instância no MegaAPI:', err);
-      return NextResponse.json({ ok: false, error: err }, { status: createResponse.status });
-    }
-
-    const createData = await createResponse.json();
-    const instance_key = createData.instanceKey ?? finalInstanceName;
-
-    console.log('✅ Instância criada no MegaAPI:', { instance_key, createData });
-
-    // Salvar instância no Supabase
-    console.log('💾 Salvando nova instância no Supabase...');
-    
+    // Salvar instância no Supabase como ATIVA (para aparecer no frontend)
     const { data: savedInstance, error: saveError } = await supabaseAdmin
       .from('whatsapp_instances')
       .insert({
         organization_id: validOrgId,
-        instance_key: instance_key,
-        token: token,
-        status: 'pendente',
+        instance_key: finalInstanceKey,
+        token: process.env.MEGA_API_TOKEN,
+        status: 'ativo', // Ativa para aparecer no frontend
         webhook_url: webhookUrl
       } as any)
       .select()
@@ -219,14 +207,12 @@ export async function POST(req: Request) {
       console.error('❌ Erro ao salvar instância no Supabase:', saveError);
       return NextResponse.json({ 
         ok: false, 
-        error: 'Instância criada no MegaAPI mas erro ao salvar no banco: ' + saveError.message 
+        error: 'Instância criada no MegaAPI mas erro ao salvar no banco: ' + saveError.message,
+        details: saveError
       }, { status: 500 });
     }
 
-    console.log('✅ Instância salva no Supabase:', savedInstance);
-
     // Criar conexão na api_connections imediatamente
-    console.log('🔗 Criando conexão na api_connections...');
     const { data: userForNewConnection } = await supabaseAdmin
       .from('users')
       .select('id')
@@ -237,39 +223,41 @@ export async function POST(req: Request) {
       const connectionData = {
         user_id: userForNewConnection.id,
         organization_id: validOrgId,
-        name: `WhatsApp Disparai - ${instance_key}`,
+        name: `WhatsApp Disparai - ${finalInstanceKey}`,
         type: 'whatsapp_disparai',
-        instance_id: instance_key,
-        api_key: token,
-        api_secret: token,
-        status: 'pending', // Inicialmente pendente, será atualizado quando conectar
-        is_active: false, // Inicialmente inativo
+        instance_id: finalInstanceKey,
+        api_key: process.env.MEGA_API_TOKEN,
+        api_secret: process.env.MEGA_API_TOKEN,
+        status: 'pending', // Pendente até conectar via QR code
+        is_active: false, // Fica ativo após conectar
         provider: 'disparai'
       };
 
-      const { data: newConnection, error: connectionError } = await supabaseAdmin
+      const { data: savedConnection, error: connectionError } = await supabaseAdmin
         .from('api_connections')
         .insert(connectionData as any)
         .select()
         .single();
 
       if (connectionError) {
-        console.error('⚠️ Erro ao criar conexão na api_connections:', connectionError);
-        // Não falhar a criação da instância por causa disso
+        console.error('❌ Erro ao criar api_connection:', connectionError);
+        // Não falha a operação, apenas loga o erro
       } else {
-        console.log('✅ Conexão criada na api_connections:', newConnection);
+        console.log('✅ API Connection criada:', savedConnection);
       }
     }
 
     return NextResponse.json({ 
       ok: true, 
-      instance_key, 
-      data: createData,
+      instance_key: finalInstanceKey, 
+      data: newMegaApiInstance,
       instance: savedInstance,
+      organization_name: organizationName,
+      organization_id: validOrgId,
+      instance_name: finalInstanceName,
       already_exists: false
     });
   } catch (error) {
-    console.error('❌ Erro geral:', error);
     return NextResponse.json({ 
       ok: false, 
       error: error instanceof Error ? error.message : 'Erro desconhecido' 

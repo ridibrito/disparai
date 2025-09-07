@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from '@/lib/supabaseServer';
+import { MegaAPI } from "@/lib/mega-api";
 
 export async function POST(req: Request) {
   try {
@@ -11,11 +12,6 @@ export async function POST(req: Request) {
         error: 'Instance key é obrigatório' 
       }, { status: 400 });
     }
-
-    const host = 'https://teste8.megaapi.com.br';
-    const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pciI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
-
-    console.log('📱 Gerando QR Code para instância:', instanceKey);
 
     // Verificar autenticação
     const supabase = await createServerClient();
@@ -39,24 +35,7 @@ export async function POST(req: Request) {
     }
 
     // Gerar QR Code no MegaAPI
-    const qrResponse = await fetch(`${host}/rest/instance/qrcode_base64/${instanceKey}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!qrResponse.ok) {
-      const errorText = await qrResponse.text();
-      console.error('❌ Erro ao gerar QR Code:', errorText);
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Erro ao gerar QR Code: ' + errorText 
-      }, { status: qrResponse.status });
-    }
-
-    const qrData = await qrResponse.json();
+    const qrData = await MegaAPI.getQrCode(instanceKey);
     
     if (!qrData.qrcode) {
       return NextResponse.json({ 
@@ -64,8 +43,6 @@ export async function POST(req: Request) {
         error: 'QR Code não foi gerado pela API' 
       }, { status: 400 });
     }
-
-    console.log('✅ QR Code gerado com sucesso para:', instanceKey);
 
     return NextResponse.json({
       success: true,

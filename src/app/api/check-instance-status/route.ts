@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from '@/lib/supabaseServer';
+import { MegaAPI } from "@/lib/mega-api";
 
 export async function POST(req: Request) {
   try {
@@ -12,11 +13,6 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    const host = 'https://teste8.megaapi.com.br';
-    const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pciI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
-
-    console.log('🔍 Verificando status da instância:', instanceKey);
-
     // Verificar autenticação
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -25,30 +21,20 @@ export async function POST(req: Request) {
     }
 
     // Verificar status no MegaAPI
-    const statusResponse = await fetch(`${host}/rest/instance/${instanceKey}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!statusResponse.ok) {
-      const errorText = await statusResponse.text();
-      console.error('❌ Erro ao verificar status:', errorText);
-      return NextResponse.json({ 
+    const statusData = await MegaAPI.getInstance(instanceKey);
+    
+    if (!statusData) {
+        return NextResponse.json({ 
         success: false, 
-        error: 'Erro ao verificar status: ' + errorText 
-      }, { status: statusResponse.status });
+        error: 'Instância não encontrada no MegaAPI' 
+      }, { status: 404 });
     }
 
-    const statusData = await statusResponse.json();
-    
     // Mapear status do MegaAPI para nosso status
     let mappedStatus = 'pendente';
-    if (statusData.instance?.status === 'connected') {
+    if (statusData.status === 'connected') {
       mappedStatus = 'ativo';
-    } else if (statusData.instance?.status === 'disconnected') {
+    } else if (statusData.status === 'disconnected') {
       mappedStatus = 'desconectado';
     }
 
@@ -60,36 +46,25 @@ export async function POST(req: Request) {
       .single();
 
     if (instance && instance.status !== mappedStatus) {
-      console.log('🔄 Atualizando status da instância no Supabase:', instanceKey, mappedStatus);
-      
-      const { error: updateError } = await supabase
+      await supabase
         .from('whatsapp_instances')
         .update({ 
           status: mappedStatus,
           updated_at: new Date().toISOString()
         })
         .eq('instance_key', instanceKey);
-
-      if (updateError) {
-        console.error('❌ Erro ao atualizar status no Supabase:', updateError);
-      } else {
-        console.log('✅ Status atualizado no Supabase');
-      }
     }
-
-    console.log('✅ Status verificado:', instanceKey, mappedStatus);
 
     return NextResponse.json({
       success: true,
       instance_key: instanceKey,
       status: mappedStatus,
-      megaapi_status: statusData.instance?.status,
+      megaapi_status: statusData.status,
       instance_data: statusData,
       updated: instance && instance.status !== mappedStatus
     });
 
   } catch (error) {
-    console.error('❌ Erro ao verificar status:', error);
     return NextResponse.json({ 
       success: false, 
       error: error instanceof Error ? error.message : 'Erro desconhecido' 

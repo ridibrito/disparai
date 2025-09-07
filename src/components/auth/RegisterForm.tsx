@@ -7,6 +7,9 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import Link from 'next/link';
 import Image from 'next/image';
+import PasswordInput from '@/components/ui/password-input';
+import ErrorMessage from '@/components/ui/error-message';
+import { getAuthErrorMessage } from '@/lib/auth-errors';
 
 const registerSchema = z.object({
   fullName: z.string().min(3, 'Nome completo deve ter pelo menos 3 caracteres'),
@@ -41,7 +44,7 @@ export default function RegisterForm() {
       await signUp(data.email, data.password, data.fullName);
     } catch (error: any) {
       console.error('Erro ao registrar:', error);
-      setError(error.message || 'Ocorreu um erro ao criar sua conta. Por favor, tente novamente.');
+      setError(getAuthErrorMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -70,9 +73,10 @@ export default function RegisterForm() {
 
           {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 text-sm text-red-700 bg-red-100 border border-red-200 rounded-md">
-              {error}
-            </div>
+            <ErrorMessage 
+              message={error} 
+              onDismiss={() => setError(null)}
+            />
           )}
 
           {/* Form */}
@@ -120,14 +124,13 @@ export default function RegisterForm() {
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Senha
               </label>
-              <input
+              <PasswordInput
                 id="password"
-                type="password"
                 {...register('password')}
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:border-gray-400 transition-colors"
-                style={{ '--tw-ring-color': '#4bca59' } as any}
                 placeholder="••••••••"
                 disabled={isLoading}
+                style={{ '--tw-ring-color': '#4bca59' } as any}
+                autoComplete="new-password"
               />
               {errors.password && (
                 <p className="text-sm text-red-600 mt-1">{errors.password.message}</p>
@@ -139,14 +142,13 @@ export default function RegisterForm() {
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
                 Confirmar Senha
               </label>
-              <input
+              <PasswordInput
                 id="confirmPassword"
-                type="password"
                 {...register('confirmPassword')}
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:border-gray-400 transition-colors"
-                style={{ '--tw-ring-color': '#4bca59' } as any}
                 placeholder="••••••••"
                 disabled={isLoading}
+                style={{ '--tw-ring-color': '#4bca59' } as any}
+                autoComplete="new-password"
               />
               {errors.confirmPassword && (
                 <p className="text-sm text-red-600 mt-1">{errors.confirmPassword.message}</p>

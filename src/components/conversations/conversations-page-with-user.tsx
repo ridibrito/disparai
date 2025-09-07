@@ -1,21 +1,167 @@
 'use client';
 
 import { MessageSquare, Send, Phone, Search, Paperclip, MoreVertical, Smile, Mic, CheckCheck } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createClientComponentClient } from '@/lib/supabase';
+
+interface Conversation {
+  id: string;
+  contact_id: string;
+  user_id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  contacts: {
+    name: string;
+    phone: string;
+  };
+  last_message_content?: string;
+  last_message_created_at?: string;
+}
+
+interface Message {
+  id: string;
+  conversation_id: string;
+  sender: 'user' | 'contact' | 'ai';
+  content: string;
+  created_at: string;
+  media_url?: string;
+}
 
 export function ConversationsPageWithUser() {
-  const [selectedConversation, setSelectedConversation] = useState('1');
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loadingConversations, setLoadingConversations] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [newMessage, setNewMessage] = useState('');
   
-  const conversations = [
-    { id: '1', name: 'vivika Novo', lastMessage: 'Eu to pensando em pedir demissão', time: '09:55', unread: 0 },
-    { id: '2', name: 'Rodrigo Durante', lastMessage: 'Bom dia', time: '09:57', unread: 1 },
-    { id: '3', name: 'ALBUQUERQUES', lastMessage: 'Tio: Bom dia família', time: '09:54', unread: 0 },
-    { id: '4', name: 'Amor', lastMessage: 'Ok', time: '09:49', unread: 0 },
-  ];
+  const supabase = createClientComponentClient();
+
+  useEffect(() => {
+    async function fetchConversations() {
+      setLoadingConversations(true);
+      const { data, error } = await supabase
+        .from('conversations')
+        .select(`
+          id,
+          contact_id,
+          user_id,
+          status,
+          created_at,
+          updated_at,
+          contacts ( name, phone ),
+          messages ( content, created_at, sender )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching conversations:', error);
+      } else {
+        const processedConversations = data.map((conv: any) => {
+          const lastMessage = conv.messages.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+          return {
+            ...conv,
+            last_message_content: lastMessage?.content || '',
+            last_message_created_at: lastMessage?.created_at || '',
+          };
+        });
+        setConversations(processedConversations);
+        if (processedConversations.length > 0) {
+          setSelectedConversation(processedConversations[0]);
+        }
+      }
+      setLoadingConversations(false);
+    }
+
+    fetchConversations();
+
+    const channel = supabase
+      .channel('conversations_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'conversations' },
+        (payload) => {
+          fetchConversations();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  useEffect(() => {
+    async function fetchMessages() {
+      if (selectedConversation) {
+        setLoadingMessages(true);
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('conversation_id', selectedConversation.id)
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          console.error('Error fetching messages:', error);
+        } else {
+          setMessages(data || []);
+        }
+        setLoadingMessages(false);
+      }
+    }
+
+    fetchMessages();
+
+    if (selectedConversation) {
+      const messageChannel = supabase
+        .channel(`messages_for_${selectedConversation.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${selectedConversation.id}` },
+          (payload) => {
+            setMessages((prevMessages) => [...prevMessages, payload.new as Message]);
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(messageChannel);
+      };
+    }
+  }, [selectedConversation]);
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !selectedConversation) return;
+
+    const messageToSend = newMessage.trim();
+    setNewMessage('');
+
+    setMessages((prevMessages) => [
+      ...prevMessages,
+      {
+        id: 'temp-' + Date.now(),
+        conversation_id: selectedConversation.id,
+        sender: 'user',
+        content: messageToSend,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    const response = await fetch(`/api/conversations/${selectedConversation.contact_id}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ message: messageToSend }),
+    });
+
+    if (!response.ok) {
+      console.error('Failed to send message');
+    }
+  };
 
   const getInitial = (name: string) => (name?.trim()[0] || '?').toUpperCase();
-
-  const selectedConv = conversations.find(c => c.id === selectedConversation);
 
   return (
     <div className="space-y-0 h-full">
@@ -31,103 +177,157 @@ export function ConversationsPageWithUser() {
           </div>
         </div>
 
-        <div className="flex flex-col md:flex-row flex-1 min-h-0 h-full">
-          {/* Lista de conversas (fixa) */}
-          <div className="border-r border-gray-200 h-full overflow-y-auto w-full md:w-[360px] bg-white">
-            {conversations.map((c) => (
-              <div 
-                key={c.id} 
-                className={`px-4 py-3 flex items-center hover:bg-gray-50 cursor-pointer ${
-                  c.unread ? 'bg-green-50' : ''
-                } ${selectedConversation === c.id ? 'bg-blue-50 border-r-2 border-blue-500' : ''}`}
-                onClick={() => setSelectedConversation(c.id)}
-              >
-                <div className="mr-3 flex-shrink-0 w-10 h-10 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-medium">
-                  {getInitial(c.name)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium truncate text-gray-900">{c.name}</p>
-                    <p className="text-xs text-gray-500 ml-2 flex-shrink-0">{c.time}</p>
+        <div className="flex h-[calc(100vh-120px)]">
+          {/* Sidebar - Lista de Conversas */}
+          <div className="w-1/3 border-r border-gray-200 bg-gray-50 overflow-y-auto">
+            {loadingConversations ? (
+              <div className="p-4 text-center text-gray-500">Carregando conversas...</div>
+            ) : conversations.length === 0 ? (
+              <div className="p-4 text-center text-gray-500">Nenhuma conversa encontrada</div>
+            ) : (
+              <div className="space-y-1 p-2">
+                {conversations.map((conversation) => (
+                  <div
+                    key={conversation.id}
+                    onClick={() => setSelectedConversation(conversation)}
+                    className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                      selectedConversation?.id === conversation.id
+                        ? 'bg-white shadow-sm border border-gray-200'
+                        : 'hover:bg-white hover:shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white font-semibold">
+                        {getInitial(conversation.contacts.name)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-medium text-gray-900 truncate">
+                            {conversation.contacts.name}
+                          </h3>
+                          <span className="text-xs text-gray-500">
+                            {conversation.last_message_created_at
+                              ? new Date(conversation.last_message_created_at).toLocaleTimeString('pt-BR', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : ''}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 truncate">
+                          {conversation.last_message_content || 'Nenhuma mensagem'}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-600 truncate">{c.lastMessage}</p>
-                </div>
-                {c.unread > 0 && (
-                  <span className="ml-3 inline-flex items-center justify-center rounded-full bg-[#25D366] text-white text-xs w-5 h-5">
-                    {c.unread}
-                  </span>
-                )}
+                ))}
               </div>
-            ))}
+            )}
           </div>
 
-          {/* Área de conversa (flexível) */}
-          <div className="flex-1 h-full flex flex-col min-h-0">
-            {selectedConv ? (
+          {/* Main Chat Area */}
+          <div className="flex-1 flex flex-col">
+            {selectedConversation ? (
               <>
-                {/* Header da conversa com status */}
+                {/* Chat Header */}
                 <div className="px-4 py-3 bg-white border-b border-gray-200 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center">
-                      <Phone className="w-5 h-5 text-[#4bca59]" />
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                      {getInitial(selectedConversation.contacts.name)}
                     </div>
                     <div>
-                      <h3 className="font-medium text-gray-900">{selectedConv.name}</h3>
-                      <p className="text-xs text-gray-500">visto por último hoje às 10:44</p>
+                      <h2 className="text-sm font-medium text-gray-900">
+                        {selectedConversation.contacts.name}
+                      </h2>
+                      <p className="text-xs text-gray-500">
+                        {selectedConversation.contacts.phone}
+                      </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4 text-gray-500">
-                    <Search className="w-5 h-5" />
-                    <Paperclip className="w-5 h-5" />
-                    <MoreVertical className="w-5 h-5" />
-                  </div>
-                </div>
-
-                {/* Mensagens */}
-                <div className="flex-1 overflow-y-auto px-6 py-4 chat-bg">
-                  <div className="space-y-2 min-x-2xl">
-                    <div className="flex justify-start">
-                      <div className="bg-white border border-gray-200 text-gray-800 rounded-lg rounded-tl-none px-3 py-2 max-w-[75%] bubble-in">
-                        <p className="text-sm">Oi paaaai</p>
-                        <div className="flex items-center justify-end mt-1 gap-1 text-[10px] text-gray-500"><span>09:55</span></div>
-                      </div>
-                    </div>
-                    <div className="flex justify-start">
-                      <div className="bg-white border border-gray-200 text-gray-800 rounded-lg rounded-tl-none px-3 py-2 max-w-[75%] bubble-in">
-                        <p className="text-sm">Tudo bem? Podemos conversar?</p>
-                        <div className="flex items-center justify-end mt-1 gap-1 text-[10px] text-gray-500"><span>09:56</span></div>
-                      </div>
-                    </div>
-                    <div className="flex justify-end">
-                      <div className="bg-[#4bca59] text-white rounded-lg rounded-tr-none px-3 py-2 max-w-[75%] shadow bubble-out">
-                        <p className="text-sm">Bom diaaa, tudo bem e vc? Podemos sim!</p>
-                        <div className="flex items-center justify-end mt-1 gap-1 text-[10px] opacity-80"><span>09:57</span><CheckCheck className="w-3 h-3" /></div>
-                      </div>
-                    </div>
+                  <div className="flex items-center space-x-2">
+                    <button className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100">
+                      <Phone className="h-4 w-4" />
+                    </button>
+                    <button className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100">
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
 
-                {/* Input */}
+                {/* Messages Area */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {loadingMessages ? (
+                    <div className="text-center text-gray-500">Carregando mensagens...</div>
+                  ) : messages.length === 0 ? (
+                    <div className="text-center text-gray-500">Nenhuma mensagem ainda</div>
+                  ) : (
+                    messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div
+                          className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                            message.sender === 'user'
+                              ? 'bg-green-500 text-white'
+                              : 'bg-gray-200 text-gray-900'
+                          }`}
+                        >
+                          <p className="text-sm">{message.content}</p>
+                          <p
+                            className={`text-xs mt-1 ${
+                              message.sender === 'user' ? 'text-green-100' : 'text-gray-500'
+                            }`}
+                          >
+                            {new Date(message.created_at).toLocaleTimeString('pt-BR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Message Input */}
                 <div className="px-4 py-3 bg-white border-t border-gray-200">
-                  <div className="min-w-2xl flex items-center gap-3">
-                    <button className="text-gray-500 hover:text-gray-700"><Smile className="w-5 h-5" /></button>
-                    <button className="text-gray-500 hover:text-gray-700"><Paperclip className="w-5 h-5" /></button>
-                    <input
-                      type="text"
-                      placeholder="Digite uma mensagem"
-                      className="flex-1 bg-white border border-gray-300 text-gray-900 placeholder-gray-500 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 ring-primary"
-                    />
-                    <button className="text-white bg-[#25D366] hover:bg-[#1fc15d] rounded-full w-9 h-9 flex items-center justify-center">
-                      <Mic className="w-4 h-4" />
+                  <div className="flex items-center space-x-2">
+                    <button className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100">
+                      <Paperclip className="h-5 w-5" />
+                    </button>
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                        placeholder="Digite sua mensagem..."
+                        className="w-full px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      />
+                      <button className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600">
+                        <Smile className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <button
+                      onClick={handleSendMessage}
+                      disabled={!newMessage.trim()}
+                      className="p-2 bg-green-500 text-white rounded-full hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Send className="h-5 w-5" />
+                    </button>
+                    <button className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100">
+                      <Mic className="h-5 w-5" />
                     </button>
                   </div>
                 </div>
               </>
             ) : (
-              <div className="flex-1 flex items-center justify-center text-gray-500">
+              <div className="flex-1 flex items-center justify-center">
                 <div className="text-center">
-                  <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>Selecione uma conversa para começar</p>
+                  <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Selecione uma conversa</h3>
+                  <p className="text-gray-500">Escolha uma conversa para começar a conversar</p>
                 </div>
               </div>
             )}

@@ -87,14 +87,23 @@ export async function POST(req: NextRequest) {
             await persistIncomingMessage(conv.id, m);
 
             // IA
-            const ai = await runAI({ messages: [{ role: 'user', content: text }] });
-            if (ai.reply) {
+            const aiResult = await runAI({ messages: [{ role: 'user', content: text }] });
+
+            // Atualizar status de qualificação do contato
+            if (aiResult.qualification_status) {
+              await supabaseAdmin
+                .from('contacts')
+                .update({ qualification_status: aiResult.qualification_status })
+                .eq('id', contact.id);
+            }
+
+            if (aiResult.reply) {
               try {
-                const res = await sendText(e164, ai.reply, connection.user_id, connection.type);
+                const res = await sendText(e164, aiResult.reply, connection.user_id, connection.type);
                 await persistOutgoingMessage(
                   conv.id,
                   'text',
-                  { body: ai.reply },
+                  { body: aiResult.reply },
                   res?.messages?.[0]?.id
                 );
 
@@ -123,7 +132,7 @@ export async function POST(req: NextRequest) {
             }
 
             // Se precisar de handoff humano
-            if (ai.handoff) {
+            if (aiResult.handoff) {
               await supabaseAdmin
                 .from('handoffs')
                 .insert({ conversation_id: conv.id, status: 'waiting' });

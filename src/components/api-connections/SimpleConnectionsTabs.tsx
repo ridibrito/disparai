@@ -12,7 +12,9 @@ import {
   CheckCircle, 
   AlertCircle,
   Loader2,
-  X
+  X,
+  Circle,
+  Copy
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import SimpleWhatsAppConnection from './SimpleWhatsAppConnection';
@@ -26,19 +28,22 @@ interface ApiConnection {
   status: 'active' | 'inactive' | 'error' | 'connected' | 'disconnected';
   phoneNumber?: string;
   instanceId?: string;
+  instance_key?: string;
   createdAt: string;
   lastUsed?: string;
   messageCount: number;
   monthlyLimit: number;
+  webhook_url?: string;
+  is_whatsapp_instance?: boolean;
+  whatsapp_status?: string;
+  api_connection_status?: string;
 }
 
 interface WhatsAppInstance {
   id: string;
   organization_id: string;
   instance_key: string;
-  token: string;
-  status: 'pendente' | 'ativo' | 'desconectado';
-  webhook_url: string;
+  status: string;
   created_at: string;
   updated_at: string;
 }
@@ -67,44 +72,44 @@ export default function SimpleConnectionsTabs() {
     setProgressMessage(message);
   };
 
-  // Função para verificar status da instância periodicamente
-  const checkInstanceStatus = async (instanceKey: string) => {
+  // Função para buscar número do WhatsApp conectado
+  const fetchWhatsAppNumber = async (instanceKey: string): Promise<string | null> => {
     try {
-      const megaApiToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
-      
-      const response = await fetch(`https://teste8.megaapi.com.br/rest/instance/${instanceKey}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${megaApiToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
+      const response = await fetch(`/api/mega/status?instanceKey=${instanceKey}`);
       if (response.ok) {
-        const data = await response.json();
-        console.log('📊 Status da instância:', data.instance?.status);
-        
-        if (data.instance?.status === 'connected') {
-          console.log('✅ WhatsApp conectado! Fechando QR Code...');
-          
-          // Atualizar status no backend
-          await updateConnectionStatusAfterQR(instanceKey);
-          
-          // Fechar modal do QR Code
-          setShowQRModal(false);
-          setQrCodeData(null);
-          setCurrentInstanceKey(null);
-          
-          toast.success('🎉 WhatsApp conectado automaticamente!');
-          return true; // Conectado
+        const result = await response.json();
+        if (result.ok && result.data?.instance?.user?.id) {
+          return result.data.instance.user.id;
         }
       }
-      
-      return false; // Ainda não conectado
     } catch (error) {
-      console.error('❌ Erro ao verificar status:', error);
-      return false;
+      console.error('Erro ao buscar número do WhatsApp:', error);
     }
+    return null;
+  };
+
+  // Função para verificar status da instância periodicamente
+  const checkInstanceStatus = async (instanceKey: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/mega/status?instanceKey=${instanceKey}`);
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('📊 Status da instância:', result.data?.instance?.status);
+        
+        if (result.ok && result.data?.instance?.status === 'connected') {
+          console.log('✅ WhatsApp conectado! Fechando QR Code...');
+          setShowQRModal(false);
+          await updateConnectionStatusAfterQR(instanceKey);
+          return true;
+        }
+      } else {
+        console.error('❌ Erro ao verificar status:', response.status);
+      }
+    } catch (error) {
+      console.error('Erro ao verificar status:', error);
+    }
+    return false;
   };
 
   // Função para iniciar verificação periódica do status
@@ -130,53 +135,46 @@ export default function SimpleConnectionsTabs() {
   // Função para atualizar status da conexão após conectar com QR Code
   const updateConnectionStatusAfterQR = async (instanceKey: string) => {
     try {
-      console.log('🔄 Atualizando status da instância:', instanceKey);
+      console.log('🔄 Atualizando status da conexão após QR Code:', instanceKey);
       
+      // Atualizar status na api_connections para 'active' quando conecta
       const response = await fetch('/api/update-instance-status', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          instance_key: instanceKey,
-          status: 'ativo'
+          instanceKey: instanceKey,
+          status: 'active' // Status para api_connections quando conecta
         }),
       });
 
       const result = await response.json();
 
       if (result.ok) {
-        console.log('✅ Status da instância atualizado:', result);
+        console.log('✅ Status da conexão atualizado:', result);
+        toast.success('WhatsApp conectado com sucesso!');
         await loadConnections(); // Recarregar lista
       } else {
         console.error('❌ Erro ao atualizar status:', result.error);
+        toast.error('Erro ao atualizar status da conexão');
       }
     } catch (error) {
       console.error('❌ Erro ao atualizar status:', error);
+      toast.error('Erro ao atualizar status da conexão');
     }
   };
 
   // Função para carregar instâncias da MegaAPI
   const loadInstances = async () => {
-    if (!user) return;
-    
-    setIsLoadingInstances(true);
     try {
-      const megaApiToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
+      setIsLoadingInstances(true);
+      const response = await fetch('/api/list-instances');
+      const data = await response.json();
       
-      const response = await fetch('https://teste8.megaapi.com.br/rest/instance/list', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${megaApiToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.data && Array.isArray(result.data)) {
-          setInstances(result.data);
-        }
+      if (data.success) {
+        setInstances(data.instances || []);
+        console.log('📱 Instâncias carregadas:', data.instances?.length || 0);
       }
     } catch (error) {
       console.error('Erro ao carregar instâncias:', error);
@@ -185,54 +183,40 @@ export default function SimpleConnectionsTabs() {
     }
   };
 
-  // Função para criar nova instância no servidor MegaAPI
+  // Função para criar nova instância usando nossa API
   const createNewInstance = async () => {
-    if (!user) return;
+    if (!user) {
+      console.error('❌ Usuário não está logado');
+      toast.error('Você precisa estar logado para criar uma instância');
+      return;
+    }
+    
+    console.log('👤 Usuário logado:', {
+      id: user.id,
+      email: user.email,
+      organization_id: (user as any).organization_id
+    });
     
     setIsCreatingInstance(true);
     setShowProgressModal(true);
     setProgressStep(0);
     
     try {
-      const megaApiToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
-      const instanceKey = `disparai_${Date.now()}`;
-      const webhookUrl = `${window.location.origin}/api/webhook/whatsapp`;
-      
-      // Armazenar o instanceKey para uso posterior
-      setCurrentInstanceKey(instanceKey);
-      
-      console.log('🔍 Debug - webhookUrl:', webhookUrl);
-      console.log('🔍 Debug - instanceKey:', instanceKey);
-      
-      // Etapa 1: Criando instância
-      updateProgress(1, 'Criando nova instância Disparai no servidor...');
+      // Etapa 1: Criando instância via nossa API
+      updateProgress(1, 'Criando nova instância Disparai...');
       await new Promise(resolve => setTimeout(resolve, 1000)); // Delay visual
       
-      console.log('🚀 Verificando/Criando instância no MegaAPI:', {
-        url: `https://teste8.megaapi.com.br/rest/instance/init?instance_key=${instanceKey}`,
-        instanceKey: instanceKey,
-        webhook: webhookUrl,
-        body: {
-          messageData: {
-            webhookUrl: webhookUrl,
-            webhookEnabled: true
-          }
-        }
-      });
+      console.log('🚀 Criando instância via API interna...');
       
-      // Passo 1: Criar instância no MegaAPI
-      console.log('📝 Criando instância no MegaAPI...');
-      const createResponse = await fetch(`https://teste8.megaapi.com.br/rest/instance/init?instance_key=${instanceKey}`, {
+      // Usar nossa API que já tem a lógica correta de nomenclatura e webhook
+      const createResponse = await fetch('/api/create-whatsapp-instance', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${megaApiToken}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          messageData: {
-            webhookUrl: webhookUrl,
-            webhookEnabled: true
-          }
+          // Não passar instanceName para usar o padrão baseado na organização
+          organizationId: (user as any).organization_id || user.id
         })
       });
 
@@ -244,40 +228,35 @@ export default function SimpleConnectionsTabs() {
       if (createResponse.ok) {
         const createResult = await createResponse.json();
         console.log('✅ Instância criada com sucesso:', createResult);
+        
+        // Armazenar o instanceKey para uso posterior
+        setCurrentInstanceKey(createResult.instance_key);
+        
         updateProgress(2, 'Instância criada com sucesso!');
         await new Promise(resolve => setTimeout(resolve, 800));
         
-        // Etapa 2: Salvando instância WhatsApp
-        updateProgress(3, 'Salvando instância WhatsApp no banco...');
+        // Etapa 2: Gerar QR Code
+        updateProgress(3, 'Gerando QR Code...');
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        const whatsappInstanceResponse = await fetch('/api/create-whatsapp-instance', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            instanceName: instanceKey
-          })
-        });
+        await generateQRCode(createResult.instance_key);
         
-        if (whatsappInstanceResponse.ok) {
-          const whatsappResult = await whatsappInstanceResponse.json();
-          console.log('✅ Instância WhatsApp salva:', whatsappResult);
-          updateProgress(4, 'Instância WhatsApp salva!');
+        updateProgress(4, 'QR Code gerado!');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Etapa 3: Iniciar verificação de status
+        updateProgress(5, 'Iniciando verificação de conexão...');
+        startStatusPolling(createResult.instance_key);
+        
+        // Fechar modal de progresso e abrir QR Code
+        setShowProgressModal(false);
+        setShowQRModal(true);
+        
+        toast.success('Instância criada com sucesso! Escaneie o QR Code para conectar.');
         } else {
-          const errorText = await whatsappInstanceResponse.text();
-          console.error('❌ Erro ao salvar instância WhatsApp:', {
-            status: whatsappInstanceResponse.status,
-            statusText: whatsappInstanceResponse.statusText,
-            error: errorText
-          });
-          updateProgress(4, 'Erro ao salvar instância - verifique os logs');
-        }
-      } else {
-        // Erro na criação da instância no MegaAPI
+        // Erro na criação da instância
         const errorText = await createResponse.text();
-        console.error('❌ Erro ao criar instância no MegaAPI:', {
+        console.error('❌ Erro ao criar instância:', {
           status: createResponse.status,
           statusText: createResponse.statusText,
           error: errorText
@@ -286,46 +265,21 @@ export default function SimpleConnectionsTabs() {
         toast.error('Erro ao criar instância no servidor');
         return;
       }
-        
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
-        // Etapa 3: Gerando QR Code
-        updateProgress(5, 'Gerando QR Code para conectar WhatsApp...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        console.log('📱 Gerando QR Code para instância:', instanceKey);
-        await generateQRCode(instanceKey);
-        
-        // Etapa 4: Finalizando
-        updateProgress(6, 'Instância criada! Leia o QR Code e comece a disparar!');
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        setShowProgressModal(false);
-        toast.success('🎉 Instância criada com sucesso!');
     } catch (error) {
-      updateProgress(0, 'Erro inesperado. Tente novamente.');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setShowProgressModal(false);
-      toast.error('Erro ao criar instância no servidor');
+      console.error('❌ Erro geral:', error);
+      toast.error('Erro ao criar instância');
     } finally {
       setIsCreatingInstance(false);
+      setShowProgressModal(false);
     }
   };
 
   // Função para gerar QR Code
   const generateQRCode = async (instanceKey: string) => {
     try {
-      const megaApiToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
+      console.log('📱 Gerando QR Code para instância:', instanceKey);
       
-      console.log('🔍 Fazendo requisição para QR Code:', `https://teste8.megaapi.com.br/rest/instance/qrcode_base64/${instanceKey}`);
-      
-      const response = await fetch(`https://teste8.megaapi.com.br/rest/instance/qrcode_base64/${instanceKey}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${megaApiToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(`/api/mega/qrcode?instanceKey=${instanceKey}`);
       
       console.log('📡 Resposta do QR Code:', {
         status: response.status,
@@ -336,86 +290,52 @@ export default function SimpleConnectionsTabs() {
         const result = await response.json();
         console.log('✅ Resposta do QR Code:', result);
         
-        if (result.qrcode) {
-          console.log('📱 QR Code recebido com sucesso!');
+        if (result.ok && result.qrcode) {
           setQrCodeData(result.qrcode);
-          setShowQRModal(true);
-          setCurrentInstanceKey(instanceKey);
+          console.log('📱 QR Code recebido com sucesso!');
           toast.success('📱 QR Code gerado! Escaneie com seu WhatsApp');
-          
-          // Iniciar verificação periódica do status
-          startStatusPolling(instanceKey);
         } else {
-          console.log('❌ QR Code não encontrado na resposta:', result);
-          toast.error('❌ QR Code não disponível');
+          console.error('❌ QR Code não gerado:', result);
+          toast.error('❌ QR Code não disponível: ' + (result.error || 'Erro desconhecido'));
         }
       } else {
-        const errorText = await response.text();
+        const errorData = await response.json();
         console.error('❌ Erro ao gerar QR Code:', {
           status: response.status,
           statusText: response.statusText,
-          error: errorText
+          error: errorData
         });
-        toast.error('❌ Erro ao gerar QR Code');
+        toast.error('❌ Erro ao gerar QR Code: ' + (errorData.error || 'Erro desconhecido'));
       }
     } catch (error) {
-      console.error('Erro ao gerar QR Code:', error);
-      toast.error('❌ Erro ao gerar QR Code');
+      console.error('❌ Erro ao gerar QR Code:', error);
+      toast.error('❌ Erro ao gerar QR Code: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
     }
   };
 
-  // Função para desconectar instância
-  const handleDisconnect = async (instanceKey: string) => {
-    try {
-      const megaApiToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
-      
-      const response = await fetch(`https://teste8.megaapi.com.br/rest/instance/logout/${instanceKey}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${megaApiToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        toast.success('Instância desconectada com sucesso!');
-        // Recarregar instâncias
-        await loadInstances();
-      } else {
-        toast.error('Erro ao desconectar instância');
-      }
-    } catch (error) {
-      console.error('Erro ao desconectar instância:', error);
-      toast.error('Erro ao desconectar instância');
-    }
-  };
-
-  // Carregar conexões e instâncias ao montar o componente
+  // Carregar dados iniciais
   useEffect(() => {
     let isMounted = true;
-    let hasLoaded = false;
     
-    const loadData = async () => {
-      if (isMounted && !hasLoaded) {
-        hasLoaded = true;
+    const loadInitialData = async () => {
+      if (!isMounted) return;
+      
         console.log('🔄 useEffect executado - carregando dados iniciais');
         
-        // Carregar instâncias primeiro
-        await loadInstances();
         try {
+        // Forçar reload das conexões para garantir dados atualizados
           await loadConnections();
+        await loadInstances();
+        
+        if (!isInitialized) {
+          setIsInitialized(true);
+        }
         } catch (error) {
           console.error('Erro ao carregar dados iniciais:', error);
-        } finally {
-          if (isMounted) {
-            setIsLoading(false); // Garantir que sempre saia do loading
-            setIsInitialized(true);
-          }
-        }
       }
     };
-    
-    loadData();
+
+    loadInitialData();
     
     return () => {
       isMounted = false;
@@ -426,49 +346,107 @@ export default function SimpleConnectionsTabs() {
     try {
       console.log('🔄 loadConnections chamado');
       
-      // Buscar conexões da tabela api_connections
-      const connectionsResponse = await fetch('/api/connections-v2');
+      // Buscar instâncias WhatsApp da tabela whatsapp_instances (PRINCIPAL)
+      const instancesResponse = await fetch(`/api/list-instances?t=${Date.now()}`);
       
-      if (!connectionsResponse.ok) {
-        throw new Error(`HTTP error! status: ${connectionsResponse.status}`);
-      }
+      console.log('🔍 [DEBUG] Resposta da API list-instances:', {
+        status: instancesResponse.status,
+        ok: instancesResponse.ok
+      });
       
-      const connectionsData = await connectionsResponse.json();
-      let allConnections = connectionsData.data || [];
-      
-      // Buscar instâncias WhatsApp da tabela whatsapp_instances
-      const instancesResponse = await fetch('/api/list-instances');
+      let allConnections: ApiConnection[] = [];
       
       if (instancesResponse.ok) {
         const instancesData = await instancesResponse.json();
+        console.log('📱 [DEBUG] Dados completos da API:', instancesData);
         console.log('📱 Instâncias WhatsApp encontradas:', instancesData.instances?.length || 0);
         
+        // Buscar conexões da tabela api_connections para verificar status de conexão (com timestamp para evitar cache)
+        const connectionsResponse = await fetch(`/api/connections-v2?t=${Date.now()}`);
+        let apiConnections: any[] = [];
+        
+        if (connectionsResponse.ok) {
+          const connectionsData = await connectionsResponse.json();
+          apiConnections = connectionsData.data || [];
+          console.log('🔗 [DEBUG] Conexões API encontradas:', apiConnections.length);
+        }
+        
         // Converter instâncias WhatsApp para formato de conexões
-        const whatsappConnections = instancesData.instances?.map((instance: any) => ({
+        const whatsappConnections = await Promise.all((instancesData.instances || []).map(async (instance: any) => {
+          // Verificar se existe uma conexão ativa correspondente na api_connections
+          const correspondingConnection = apiConnections.find(conn => {
+            const matchByInstanceId = conn.instance_id === instance.instance_key;
+            const matchByName = conn.name?.includes(instance.instance_key);
+            // Log apenas se não encontrar correspondência
+            if (!matchByInstanceId && !matchByName) {
+              console.log(`⚠️ [DEBUG] Nenhuma correspondência encontrada para ${instance.instance_key}:`, {
+                conn_instance_id: conn.instance_id,
+                conn_name: conn.name
+              });
+            }
+            return matchByInstanceId || matchByName;
+          });
+          
+          // Log resumido da correspondência
+          console.log(`🔍 [DEBUG] ${instance.instance_key}:`, {
+            found_corresponding: !!correspondingConnection,
+            corresponding_status: correspondingConnection?.status || 'none'
+          });
+          
+          // Determinar status baseado em ambas as tabelas
+          let finalStatus = 'disconnected';
+          if (instance.status === 'ativo') {
+            if (correspondingConnection && correspondingConnection.status === 'active') {
+              finalStatus = 'connected'; // WhatsApp conectado via QR Code
+            } else {
+              finalStatus = 'active'; // Instância ativa mas não conectada
+            }
+          }
+          
+          console.log(`✅ [DEBUG] ${instance.instance_key}: ${instance.status} + ${correspondingConnection?.status || 'none'} = ${finalStatus}`);
+          
+          // Buscar número do WhatsApp se estiver conectado
+          let whatsappNumber = null;
+          if (finalStatus === 'connected') {
+            whatsappNumber = await fetchWhatsAppNumber(instance.instance_key);
+          }
+          
+          return {
           id: instance.id,
           name: `WhatsApp Disparai - ${instance.instance_key}`,
           type: 'whatsapp_disparai',
-          status: instance.status === 'ativo' ? 'connected' : 'disconnected',
+            status: finalStatus,
           instance_key: instance.instance_key,
-          created_at: instance.created_at,
-          updated_at: instance.updated_at,
-          is_whatsapp_instance: true // Flag para identificar que veio da tabela whatsapp_instances
-        })) || [];
+            createdAt: instance.created_at,
+            lastUsed: instance.updated_at,
+            messageCount: 0,
+            monthlyLimit: 1000,
+            is_whatsapp_instance: true,
+            whatsapp_status: instance.status,
+            api_connection_status: correspondingConnection?.status,
+            webhook_url: instance.webhook_url,
+            whatsapp_number: whatsappNumber
+          };
+        }));
         
-        // Combinar conexões existentes com instâncias WhatsApp
-        allConnections = [...allConnections, ...whatsappConnections];
+        console.log('🔄 [DEBUG] Conexões WhatsApp convertidas:', whatsappConnections);
+        
+        allConnections = whatsappConnections;
+        console.log('🔄 [DEBUG] Apenas instâncias WhatsApp (sem duplicatas):', allConnections);
       }
       
       setConnections(allConnections);
       console.log('📋 Total de conexões carregadas:', allConnections.length);
+      console.log('📋 [DEBUG] Estado das conexões após setState:', allConnections);
       
     } catch (error) {
       console.error('Error loading connections:', error);
-      // Não mostrar toast de erro para não poluir a interface
-      setConnections([]); // Definir array vazio em caso de erro
+      setConnections([]);
+    } finally {
+      setIsLoading(false);
+      console.log('✅ [DEBUG] Loading definido como false');
     }
   };
-
 
   const handleSaveConnection = async (newConnection: ApiConnection) => {
     try {
@@ -482,7 +460,7 @@ export default function SimpleConnectionsTabs() {
 
       if (response.ok) {
         toast.success(data.message || 'Conexão criada com sucesso!');
-        await loadConnections();
+        await loadConnections(); // Recarregar lista
       } else {
         toast.error(data.error || 'Erro ao criar conexão');
       }
@@ -492,606 +470,453 @@ export default function SimpleConnectionsTabs() {
     }
   };
 
-  const handleConnected = async () => {
-    toast.success('WhatsApp conectado com sucesso!');
-    
-    // Configurar webhook automaticamente após conectar
+  const handleTestConnection = async (connectionId: string) => {
     try {
-      const instanceKey = 'disparai'; // Usar a instância padrão
-      const webhookUrl = `${window.location.origin}/api/webhook/whatsapp`;
-      
-      console.log('🔗 Configurando webhook automaticamente...');
-      
-      const response = await fetch(`https://teste8.megaapi.com.br/rest/webhook/${instanceKey}`, {
+      const response = await fetch(`/api/connections/${connectionId}/test`, {
         method: 'POST',
-        headers: {
-          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          webhookUrl: webhookUrl
-        })
       });
-      
-      const result = await response.json();
-      console.log('📡 Resposta da configuração automática do webhook:', result);
-      
-      if (!result.error) {
-        toast.success('Webhook configurado automaticamente!');
-        console.log('✅ Webhook configurado automaticamente:', webhookUrl);
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success(data.message);
       } else {
-        console.log('⚠️ Webhook não configurado automaticamente:', result.message);
+        toast.error(data.message);
+      }
+
+      // Recarregar conexões para atualizar status
+      await loadConnections();
+    } catch (error) {
+      console.error('Error testing connection:', error);
+      toast.error('Erro ao testar conexão');
+    }
+  };
+
+  const handleDeleteConnection = async (connectionId: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta conexão?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/connections/${connectionId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success(data.message || 'Conexão excluída com sucesso!');
+        await loadConnections(); // Recarregar lista
+      } else {
+        toast.error(data.error || 'Erro ao excluir conexão');
       }
     } catch (error) {
-      console.log('⚠️ Erro ao configurar webhook automaticamente:', error);
+      console.error('Error deleting connection:', error);
+      toast.error('Erro ao excluir conexão');
     }
-    
+  };
+
+  const handleConnected = () => {
+    toast.success('WhatsApp conectado com sucesso!');
     loadConnections();
-    setShowDisparaiConnection(false);
-    setQrCodeData(null); // Limpar QR Code
-    setShowQRModal(false); // Fechar modal
   };
 
-  const handleCloseQRModal = () => {
-    setShowQRModal(false);
-    setQrCodeData(null);
-  };
-
-  const handleConnectInstance = async (instance: WhatsAppInstance) => {
+  // Função para conectar instância existente (gerar QR Code)
+  const handleConnectInstance = async (connection: any) => {
     try {
-      console.log('🔗 Conectando instância:', instance.instance_key);
+      console.log('🔗 Conectando instância:', connection.instance_key);
       
-      const megaApiToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
+      setCurrentInstanceKey(connection.instance_key);
+      setShowQRModal(true);
       
       // Gerar QR Code
-      const qrResponse = await fetch(`https://teste8.megaapi.com.br/rest/instance/qrcode/${instance.instance_key}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${megaApiToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      await generateQRCode(connection.instance_key);
       
-      const qrResult = await qrResponse.json();
+      // Iniciar verificação de status
+      startStatusPolling(connection.instance_key);
       
-      if (qrResult.error) {
-        toast.error('Erro ao gerar QR Code: ' + qrResult.message);
-        return;
-      }
-      
-      if (qrResult.qrcode) {
-        setQrCodeData(qrResult.qrcode);
-        setShowQRModal(true);
-        toast.success('QR Code gerado com sucesso!');
-      } else {
-        toast.error('QR Code não foi gerado');
-      }
-      
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erro ao conectar instância:', error);
-      toast.error('Erro ao conectar instância: ' + error.message);
+      toast.error('Erro ao conectar instância');
     }
   };
 
-  const handleEditInstance = async (instance: WhatsAppInstance) => {
-    toast.success('Função de edição será implementada em breve');
-  };
-
-  const handleDisconnectInstance = async (instance: WhatsAppInstance) => {
+  // Função para desconectar instância
+  const handleDisconnectInstance = async (connection: any) => {
     try {
-      console.log('🔌 Desconectando instância:', instance.instance_key);
+      console.log('🔌 Desconectando instância:', connection.instance_key);
       
-      const megaApiToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
-      
-      // Desconectar instância
-      const disconnectResponse = await fetch(`https://teste8.megaapi.com.br/rest/instance/${instance.instance_key}/logout`, {
+      // Atualizar status na api_connections para 'pending'
+      const response = await fetch('/api/update-instance-status', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${megaApiToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      const disconnectResult = await disconnectResponse.json();
-      
-      if (disconnectResult.error) {
-        toast.error('Erro ao desconectar: ' + disconnectResult.message);
-        return;
-      }
-      
-      toast.success('Instância desconectada com sucesso!');
-      loadInstances(); // Recarregar lista
-      
-    } catch (error: any) {
-      console.error('Erro ao desconectar instância:', error);
-      toast.error('Erro ao desconectar instância: ' + error.message);
-    }
-  };
-
-  const handleConfigureWebhook = async (connection: ApiConnection) => {
-    try {
-      const instanceKey = connection.instanceId || 'disparai';
-      console.log('🔗 Configurando webhook para instância:', instanceKey);
-      
-      // URL do webhook (você pode configurar isso no seu domínio)
-      const webhookUrl = `${window.location.origin}/api/webhook/whatsapp`;
-      
-      // Usar o endpoint correto da MegaAPI
-      const response = await fetch(`https://teste8.megaapi.com.br/rest/webhook/${instanceKey}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs',
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          webhookUrl: webhookUrl
-        })
+          instanceKey: connection.instance_key,
+          status: 'pending'
+        }),
       });
-      
-      const result = await response.json();
-      console.log('📡 Resposta da configuração do webhook:', result);
-      
-      if (!result.error) {
-        toast.success('Webhook configurado com sucesso!');
-        console.log('✅ Webhook configurado:', webhookUrl);
+
+      if (response.ok) {
+        toast.success('Instância desconectada com sucesso!');
+        await loadConnections(); // Recarregar lista
       } else {
-        toast.error('Erro ao configurar webhook: ' + (result.message || 'Erro desconhecido'));
-        console.error('❌ Erro na configuração:', result);
+        toast.error('Erro ao desconectar instância');
       }
       
-    } catch (error: any) {
-      console.error('Erro ao configurar webhook:', error);
-      toast.error('Erro ao configurar webhook: ' + error.message);
+    } catch (error) {
+      console.error('Erro ao desconectar instância:', error);
+      toast.error('Erro ao desconectar instância');
     }
   };
 
-
-  const handleConnect = async (connection: ApiConnection) => {
+  // Função para copiar webhook URL
+  const handleCopyWebhook = async (webhookUrl: string) => {
     try {
-      const instanceKey = connection.instanceId || 'disparai';
-      console.log('🔌 Conectando instância:', instanceKey);
-      
-      // Gerar QR Code para conectar a instância
-      const response = await fetch(`https://teste8.megaapi.com.br/rest/instance/qrcode/${instanceKey}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs',
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      const result = await response.json();
-      console.log('🔍 Resposta da API:', result);
-      
-      if (!result.error && result.qrcode) {
-        console.log('✅ QR Code recebido:', result.qrcode.substring(0, 50) + '...');
-        toast.success('QR Code gerado! Escaneie para conectar o WhatsApp.');
-        // Armazenar o QR Code e abrir o modal
-        // A API já retorna com o prefixo data:image/png;base64,
-        setQrCodeData(result.qrcode);
-        setShowQRModal(true);
-      } else {
-        toast.error('Erro ao gerar QR Code: ' + (result.message || 'Erro desconhecido'));
-      }
-    } catch (error: any) {
-      console.error('Erro ao conectar:', error);
-      toast.error('Erro ao conectar: ' + error.message);
+      await navigator.clipboard.writeText(webhookUrl);
+      toast.success('Webhook copiado para a área de transferência!');
+    } catch (error) {
+      console.error('Erro ao copiar webhook:', error);
+      toast.error('Erro ao copiar webhook');
     }
   };
-
-  const handleEdit = (connection: ApiConnection) => {
-    console.log('✏️ Editando conexão:', connection.id);
-    toast.success('Funcionalidade de edição será implementada em breve');
-  };
-
 
   // Filtrar conexões por tipo
   const disparaiConnections = connections.filter(conn => conn.type === 'whatsapp_disparai');
   const cloudConnections = connections.filter(conn => conn.type === 'whatsapp_cloud');
+  
+  console.log('🔍 [DEBUG] Conexões Disparai filtradas:', disparaiConnections);
+  console.log('🔍 [DEBUG] Conexões Cloud filtradas:', cloudConnections);
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'connected':
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case 'active':
+        return <CheckCircle className="w-4 h-4 text-blue-500" />;
+      case 'disconnected':
+      case 'inactive':
+        return <AlertCircle className="w-4 h-4 text-red-500" />;
+      case 'error':
+        return <AlertCircle className="w-4 h-4 text-red-500" />;
+      default:
+        return <Loader2 className="w-4 h-4 text-yellow-500 animate-spin" />;
+    }
+  };
+
+  const getStatusBadge = (status: string, connection?: any) => {
+    switch (status) {
+      case 'connected':
+        return (
+          <div className="flex flex-col items-center space-y-1">
+            <Badge className="bg-green-100 text-green-800 border-green-200">WhatsApp Conectado</Badge>
+            {connection?.whatsapp_number && (
+              <span className="text-xs text-green-600">📱 {connection.whatsapp_number}</span>
+            )}
+          </div>
+        );
+      case 'active':
+        return (
+          <Badge className="bg-blue-100 text-blue-800 border-blue-200">Instância Ativa</Badge>
+        );
+      case 'disconnected':
+      case 'inactive':
+        return (
+          <div className="flex flex-col items-center space-y-1">
+            <Badge className="bg-red-100 text-red-800 border-red-200">Desconectado</Badge>
+            <span className="text-xs text-red-600">⚠️ Conecte um WhatsApp</span>
+          </div>
+        );
+      case 'error':
+        return (
+          <div className="flex flex-col items-center space-y-1">
+            <Badge className="bg-red-100 text-red-800 border-red-200">Erro</Badge>
+            <span className="text-xs text-red-600">❌ Verifique a conexão</span>
+          </div>
+        );
+      default:
+        return (
+          <div className="flex flex-col items-center space-y-1">
+            <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pendente</Badge>
+            <span className="text-xs text-yellow-600">⏳ Aguardando...</span>
+          </div>
+        );
+    }
+  };
+
+  // Função para botões de ação baseados no status
+  const getActionButtons = (connection: any) => {
+    const buttons = [];
+
+    switch (connection.status) {
+      case 'connected':
+        // Conectado: mostrar botão Desconectar
+        buttons.push(
+          <Button
+            key="disconnect"
+            variant="outline"
+            size="sm"
+            onClick={() => handleDisconnectInstance(connection)}
+            className="text-red-600 border-red-200 hover:bg-red-50"
+          >
+            Desconectar WhatsApp
+          </Button>
+        );
+        break;
+        
+      case 'active':
+        // Ativo: mostrar botão Conectar (QR Code)
+        buttons.push(
+          <Button
+            key="connect"
+            variant="outline"
+            size="sm"
+            onClick={() => handleConnectInstance(connection)}
+            className="text-green-600 border-green-200 hover:bg-green-50"
+          >
+            Conectar WhatsApp
+          </Button>
+        );
+        break;
+        
+      case 'disconnected':
+        // Desconectado: mostrar botões Conectar e Deletar
+        buttons.push(
+          <Button
+            key="connect"
+            variant="outline"
+            size="sm"
+            onClick={() => handleConnectInstance(connection)}
+            className="text-green-600 border-green-200 hover:bg-green-50"
+          >
+            Conectar WhatsApp
+          </Button>
+        );
+        break;
+    }
+
+    // Sempre mostrar botão Deletar (exceto quando conectado)
+    if (connection.status !== 'connected') {
+      buttons.push(
+        <Button
+          key="delete"
+          variant="outline"
+          size="sm"
+          onClick={() => handleDeleteConnection(connection.id)}
+          className="text-red-600 border-red-200 hover:bg-red-50"
+        >
+          Cancelar Instância
+        </Button>
+      );
+    }
+
+    return buttons;
+  };
+
+  console.log('🔄 [DEBUG] Estado do componente - isLoading:', isLoading, 'connections:', connections.length);
 
   if (isLoading) {
+    console.log('🔄 [DEBUG] Mostrando tela de loading');
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <Loader2 className="w-8 h-8 animate-spin text-green-600 mx-auto" />
-          <p className="text-gray-600">Carregando conexões...</p>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin" />
+        <span className="ml-2">Carregando conexões...</span>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-6xl mx-auto px-4">
+    <div className="space-y-6">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Conexões API
-          </h1>
-          <p className="text-gray-600">
-            Gerencie suas conexões com WhatsApp Cloud API e API Disparai
-          </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Conexões de API</h2>
+          <p className="text-gray-600">Gerencie suas integrações com WhatsApp</p>
+        </div>
+        <Button onClick={() => setIsModalOpen(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Nova Conexão
+        </Button>
         </div>
 
-
-        {/* Navegação das Abas */}
-        <div className="mb-6">
-          <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
             <button
-              onClick={() => {
-                console.log('Clicou em API Disparai');
-                setActiveTab('disparai');
-              }}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-medium transition-colors ${
+            onClick={() => setActiveTab('disparai')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'disparai'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                ? 'border-green-500 text-green-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              <Zap className="w-4 h-4" />
-              API Disparai
+            <Zap className="w-4 h-4 inline mr-2 text-green-500" />
+            Disparai API (Unofficial)
             </button>
             <button
-              onClick={() => {
-                console.log('Clicou em Cloud API');
-                setActiveTab('cloud');
-              }}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-medium transition-colors ${
+            onClick={() => setActiveTab('cloud')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'cloud'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              <MessageCircle className="w-4 h-4" />
+            <MessageCircle className="w-4 h-4 inline mr-2 text-blue-500" />
               WhatsApp Cloud API
             </button>
-          </div>
+        </nav>
         </div>
 
-        {/* Conteúdo das Abas */}
+      {/* Content */}
         {activeTab === 'disparai' && (
-          <div className="space-y-6">
-            <Card className="border-green-200 bg-green-50">
-              <CardHeader>
-                <CardTitle className="text-green-900 flex items-center gap-2">
-                  <Zap className="w-5 h-5" />
-                  API Disparai (Recomendado)
-                </CardTitle>
-                <CardDescription className="text-green-700">
-                  Conexão automática e simplificada. Apenas escaneie o QR Code para conectar.
-                </CardDescription>
-              </CardHeader>
-             
-            </Card>
-
-            {/* Conexão Disparai */}
-            {instances.length > 0 || disparaiConnections.length > 0 ? (
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Suas Instâncias WhatsApp
-                </h3>
-                
-                {/* Listar instâncias da MegaAPI */}
-                {instances.map((instance) => (
-                  <Card key={instance.instance_key}>
+          {/* Botão para criar nova instância */}
+          <Card>
                     <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <Zap className="w-5 h-5 text-green-600" />
-                          <div>
-                            <CardTitle className="text-lg">{instance.instance_key}</CardTitle>
+              <CardTitle className="flex items-center">
+                <Zap className="w-5 h-5 mr-2 text-green-500" />
+                Disparai API (Unofficial)
+              </CardTitle>
                             <CardDescription>
-                              API Disparai • {instance.status}
+                Conecte sua conta WhatsApp usando a API não oficial do Disparai
                             </CardDescription>
-                          </div>
-                        </div>
-                        <Badge 
-                          variant="outline" 
-                          className={instance.status === 'ativo' 
-                            ? 'text-green-600 border-green-200' 
-                            : instance.status === 'pendente'
-                            ? 'text-yellow-600 border-yellow-200'
-                            : 'text-red-600 border-red-200'
-                          }
-                        >
-                          {instance.status === 'ativo' ? 'Ativo' : 
-                           instance.status === 'pendente' ? 'Pendente' : 'Desconectado'}
-                        </Badge>
-                      </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Status</p>
-                          <p className="text-lg font-bold text-gray-900">{instance.status}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Criada em</p>
-                          <p className="text-sm text-gray-600">
-                            {new Date(instance.created_at).toLocaleDateString('pt-BR')}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {/* Botões de ação baseados no status */}
-                      <div className="flex gap-2 pt-4 border-t">
-                        {instance.status === 'ativo' ? (
-                          <>
                             <Button 
-                              onClick={() => generateQRCode(instance.instance_key)}
-                              size="sm"
-                              variant="outline"
-                              className="border-blue-200 text-blue-600 hover:bg-blue-50"
-                            >
-                              <MessageCircle className="w-4 h-4 mr-2" />
-                              Gerar QR Code
-                            </Button>
-                            <Button 
-                              onClick={() => handleDisconnect(instance.instance_key)}
-                              size="sm"
-                              variant="outline"
-                              className="border-red-200 text-red-600 hover:bg-red-50"
-                            >
-                              <X className="w-4 h-4 mr-2" />
-                              Desconectar
-                            </Button>
-                          </>
-                        ) : instance.status === 'pendente' ? (
-                          <Button 
-                            onClick={() => generateQRCode(instance.instance_key)}
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700 text-white"
-                          >
-                            <Zap className="w-4 h-4 mr-2" />
-                            Conectar
-                          </Button>
-                        ) : (
-                          <Button 
-                            onClick={() => generateQRCode(instance.instance_key)}
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700 text-white"
-                          >
-                            <Zap className="w-4 h-4 mr-2" />
-                            Reconectar
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {/* Listar conexões do banco de dados */}
-                {disparaiConnections.map((connection) => (
-                  <Card key={connection.id}>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <Zap className="w-5 h-5 text-green-600" />
-                          <div>
-                            <CardTitle className="text-lg">{connection.name}</CardTitle>
-                            <CardDescription>
-                              API Disparai • {connection.instanceId}
-                            </CardDescription>
-                          </div>
-                        </div>
-                        <Badge 
-                          variant="outline" 
-                          className={connection.status === 'active' 
-                            ? 'text-green-600 border-green-200' 
-                            : 'text-yellow-600 border-yellow-200'
-                          }
-                        >
-                          {connection.status === 'active' ? 'Conectado' : 'Desconectado'}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Mensagens Enviadas</p>
-                          <p className="text-2xl font-bold text-gray-900">{connection.messageCount}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Limite Mensal</p>
-                          <p className="text-2xl font-bold text-gray-900">{connection.monthlyLimit}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Último Uso</p>
-                          <p className="text-sm text-gray-600">
-                            {connection.lastUsed 
-                              ? new Date(connection.lastUsed).toLocaleDateString('pt-BR')
-                              : 'Nunca'
-                            }
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {/* Botões de ação */}
-                      <div className="flex gap-2 pt-4 border-t">
-                        {connection.status === 'inactive' ? (
-                          <Button 
-                            onClick={() => handleConnect(connection)}
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700 text-white"
-                            disabled={isCreatingInstance}
-                          >
-                            {isCreatingInstance ? (
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                              <Zap className="w-4 h-4 mr-2" />
-                            )}
-                            {isCreatingInstance ? 'Criando...' : 'Conectar'}
-                          </Button>
-                        ) : (
-                          <>
-                            <Button 
-                              onClick={() => handleEdit(connection)}
-                              size="sm"
-                              variant="outline"
-                            >
-                              Editar
-                            </Button>
-                            <Button 
-                              onClick={() => handleConfigureWebhook(connection)}
-                              size="sm"
-                              variant="outline"
-                              className="text-green-600 border-green-200 hover:bg-green-50"
-                            >
-                              <Zap className="w-4 h-4 mr-1" />
-                              Webhook
-                            </Button>
-                            <Button 
-                              onClick={() => handleDisconnect(connection.instanceId || 'disparai')}
-                              size="sm"
-                              variant="outline"
-                              className="text-red-600 border-red-200 hover:bg-red-50"
-                            >
-                              Desconectar
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                
-                {/* Mostrar componente de conexão se solicitado */}
-                {user && showDisparaiConnection && (
-                  <div className="mt-6">
-                    <SimpleWhatsAppConnection
-                      userId={user.id}
-                      userName={user.email || 'Usuário'}
-                      qrCodeData={qrCodeData}
-                      onConnected={handleConnected}
-                      onError={(error) => {
-                        toast.error('Erro: ' + error);
-                      }}
-                    />
-                  </div>
+                onClick={createNewInstance}
+                disabled={isCreatingInstance}
+                className="w-full"
+              >
+                {isCreatingInstance ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Criando Instância...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Conectar WhatsApp
+                  </>
                 )}
+              </Button>
+                    </CardContent>
+                  </Card>
+
+          {/* Lista de conexões Disparai */}
+          {disparaiConnections.length > 0 ? (
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold">Conexões WhatsApp</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {disparaiConnections.map((connection) => (
+                  <Card key={connection.id} className="border border-gray-200 hover:border-gray-300 transition-colors">
+                    <CardContent className="p-4">
+                      <div className="space-y-3">
+                        {/* Header com status e ícone */}
+                      <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            {getStatusIcon(connection.status)}
+                            <div className="flex flex-col">
+                              <h4 className="font-medium text-sm">{connection.name}</h4>
+                              <span className="text-xs text-gray-500">
+                                Criado em: {new Date(connection.createdAt).toLocaleDateString('pt-BR')}
+                              </span>
+                          </div>
+                        </div>
+                          {getStatusBadge(connection.status, connection)}
+                      </div>
+                      
+                        {/* Webhook URL com botão copiar */}
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-600 font-medium">Webhook:</p>
+                          <div className="flex items-center space-x-2">
+                            <code className="text-xs bg-gray-100 px-2 py-1 rounded flex-1 truncate">
+                              {connection.webhook_url || 'http://localhost:3000/api/webhooks/whatsapp/...'}
+                            </code>
+                          <Button 
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCopyWebhook(connection.webhook_url || 'http://localhost:3000/api/webhooks/whatsapp/...')}
+                              className="h-6 px-2 text-xs"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                        
+                        {/* Botões de ação */}
+                        <div className="flex items-center justify-end space-x-2 pt-2 border-t border-gray-100">
+                          {getActionButtons(connection)}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                  </div>
               </div>
             ) : (
-              <div className="space-y-6">
-                <div className="text-center py-8">
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Zap className="w-8 h-8 text-green-600" />
+            <Card>
+              <CardContent className="p-6 text-center">
+                <div className="flex flex-col items-center space-y-4">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
+                    <Zap className="w-8 h-8 text-gray-400" />
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                    Conecte seu WhatsApp
-                  </h3>
-                  <p className="text-gray-600 mb-6">
-                    Conecte seu WhatsApp para começar a enviar mensagens em massa
-                  </p>
-                  
-                  {/* Botão de conexão destacado */}
-                  <div className="mb-6">
-                    <Button 
-                      onClick={createNewInstance}
-                      disabled={isCreatingInstance}
-                      size="lg"
-                      className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 text-lg"
-                    >
-                      {isCreatingInstance ? (
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      ) : (
-                        <Zap className="w-5 h-5 mr-2" />
-                      )}
-                      {isCreatingInstance ? 'Conectando...' : 'Conectar WhatsApp'}
-                    </Button>
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900">Nenhuma conexão WhatsApp</h3>
+                    <p className="text-gray-500 mt-1">
+                      Clique em "Conectar WhatsApp" acima para criar sua primeira instância
+                    </p>
                   </div>
                 </div>
-                
-              </div>
+              </CardContent>
+            </Card>
             )}
           </div>
         )}
 
         {activeTab === 'cloud' && (
-          <div className="space-y-6">
-            <Card className="border-blue-200 bg-blue-50">
+        <div className="space-y-4">
+          <Card>
               <CardHeader>
-                <CardTitle className="text-blue-900 flex items-center gap-2">
-                  <MessageCircle className="w-5 h-5" />
-                  WhatsApp Cloud API (Oficial)
+              <CardTitle className="flex items-center">
+                <MessageCircle className="w-5 h-5 mr-2 text-blue-500" />
+                WhatsApp Cloud API
                 </CardTitle>
-                <CardDescription className="text-blue-700">
-                  API oficial do Meta para WhatsApp Business. Requer configuração manual.
+              <CardDescription>
+                Conecte sua conta WhatsApp Business usando a API oficial do Meta
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <h4 className="font-medium text-blue-900">Requisitos:</h4>
-                      <ul className="text-sm text-blue-800 space-y-1">
-                        <li>• Conta no Meta Business Manager</li>
-                        <li>• App criado no Facebook Developers</li>
-                        <li>• Token com permissões específicas</li>
-                        <li>• Phone Number ID válido</li>
-                      </ul>
-                    </div>
-                    <div className="space-y-2">
-                      <h4 className="font-medium text-blue-900">Características:</h4>
-                      <ul className="text-sm text-blue-800 space-y-1">
-                        <li>• API oficial do Meta</li>
-                        <li>• Templates aprovados</li>
-                        <li>• Integração com Facebook Business</li>
-                        <li>• Relatórios detalhados</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
+              <Button 
+                onClick={() => setShowDisparaiConnection(true)}
+                className="w-full"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Conectar WhatsApp Business
+              </Button>
               </CardContent>
             </Card>
 
-            {/* Conexões Cloud API */}
+          {/* Lista de conexões Cloud */}
             {cloudConnections.length > 0 ? (
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Suas Conexões WhatsApp Cloud API
-                </h3>
+              <h3 className="text-lg font-semibold">Conexões Ativas</h3>
                 {cloudConnections.map((connection) => (
                   <Card key={connection.id}>
-                    <CardHeader>
+                  <CardContent className="p-6">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <MessageCircle className="w-5 h-5 text-blue-600" />
+                      <div className="flex items-center space-x-4">
+                        {getStatusIcon(connection.status)}
                           <div>
-                            <CardTitle className="text-lg">{connection.name}</CardTitle>
-                            <CardDescription>
-                              WhatsApp Cloud API • {connection.phoneNumber}
-                            </CardDescription>
+                          <h4 className="font-medium">{connection.name}</h4>
+                          <p className="text-sm text-gray-500">
+                            Criado em: {new Date(connection.createdAt).toLocaleDateString()}
+                          </p>
                           </div>
                         </div>
-                        <Badge 
-                          variant="outline" 
-                          className={connection.status === 'active' 
-                            ? 'text-green-600 border-green-200' 
-                            : 'text-yellow-600 border-yellow-200'
-                          }
-                        >
-                          {connection.status === 'active' ? 'Ativo' : 'Inativo'}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Mensagens Enviadas</p>
-                          <p className="text-2xl font-bold text-gray-900">{connection.messageCount}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Limite Mensal</p>
-                          <p className="text-2xl font-bold text-gray-900">{connection.monthlyLimit}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Último Uso</p>
-                          <p className="text-sm text-gray-600">
-                            {connection.lastUsed 
-                              ? new Date(connection.lastUsed).toLocaleDateString('pt-BR')
-                              : 'Nunca'
-                            }
-                          </p>
+                      <div className="flex items-center space-x-2">
+                        {getStatusBadge(connection.status)}
+                        {getActionButtons(connection)}
                         </div>
                       </div>
                     </CardContent>
@@ -1099,305 +924,103 @@ export default function SimpleConnectionsTabs() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <MessageCircle className="w-8 h-8 text-blue-600" />
+            <Card>
+              <CardContent className="p-6 text-center">
+                <div className="flex flex-col items-center space-y-4">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
+                    <MessageCircle className="w-8 h-8 text-gray-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Configurar WhatsApp Cloud API
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  Configure sua conexão com a API oficial do WhatsApp
-                </p>
-                <Button 
-                  onClick={() => {
-                    console.log('Clicou em Nova Conexão');
-                    setIsModalOpen(true);
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Nova Conexão
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Seção de Instâncias Criadas */}
-        {activeTab === 'disparai' && (
-          <div className="mt-8">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Instâncias Criadas</h3>
-              <Button
-                onClick={loadInstances}
-                variant="outline"
-                size="sm"
-                disabled={isLoadingInstances}
-              >
-                {isLoadingInstances ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                ) : (
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                )}
-                Atualizar
-              </Button>
-            </div>
-
-            {isLoadingInstances ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-                <span className="ml-2 text-gray-600">Carregando instâncias...</span>
-              </div>
-            ) : instances.length > 0 ? (
-              <div className="grid gap-4">
-                {instances.map((instance) => (
-                  <Card key={instance.id}>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
                         <div>
-                          <CardTitle className="flex items-center gap-2">
-                            <Zap className="w-5 h-5 text-green-600" />
-                            {instance.instance_key}
-                          </CardTitle>
-                          <CardDescription>
-                            Criada em {new Date(instance.created_at).toLocaleString('pt-BR')}
-                          </CardDescription>
-                        </div>
-                        <Badge 
-                          className={
-                            instance.status === 'ativo' 
-                              ? 'bg-green-100 text-green-800' 
-                              : instance.status === 'pendente'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-red-100 text-red-800'
-                          }
-                        >
-                          {instance.status === 'ativo' && <CheckCircle className="w-3 h-3 mr-1" />}
-                          {instance.status === 'pendente' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-                          {instance.status === 'desconectado' && <AlertCircle className="w-3 h-3 mr-1" />}
-                          {instance.status === 'ativo' ? 'Conectado' : 
-                           instance.status === 'pendente' ? 'Pendente' : 'Desconectado'}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <p className="text-sm">
-                            <strong>ID:</strong> {instance.id}
+                    <h3 className="text-lg font-medium text-gray-900">Nenhuma conexão WhatsApp Business</h3>
+                    <p className="text-gray-500 mt-1">
+                      Clique em "Conectar WhatsApp Business" acima para criar sua primeira conexão
                           </p>
-                          <p className="text-sm">
-                            <strong>Webhook:</strong> {instance.webhook_url}
-                          </p>
-                          <p className="text-sm">
-                            <strong>Atualizada:</strong> {new Date(instance.updated_at).toLocaleString('pt-BR')}
-                          </p>
-                        </div>
-                        
-                        {/* Botões condicionais baseados no status */}
-                        <div className="flex gap-2 flex-wrap">
-                          {instance.status === 'desconectado' && (
-                            <Button
-                              onClick={() => handleConnectInstance(instance)}
-                              size="sm"
-                              className="bg-green-600 hover:bg-green-700"
-                            >
-                              <Zap className="w-4 h-4 mr-2" />
-                              Conectar
-                            </Button>
-                          )}
-                          
-                          {instance.status === 'ativo' && (
-                            <>
-                              <Button
-                                onClick={() => handleEditInstance(instance)}
-                                size="sm"
-                                variant="outline"
-                              >
-                                Editar
-                              </Button>
-                              <Button
-                                onClick={() => handleDisconnectInstance(instance)}
-                                size="sm"
-                                variant="outline"
-                                className="text-red-600 border-red-600 hover:bg-red-50"
-                              >
-                                Desconectar
-                              </Button>
-                            </>
-                          )}
-                          
-                          {instance.status === 'pendente' && (
-                            <Button
-                              onClick={() => handleConnectInstance(instance)}
-                              size="sm"
-                              className="bg-yellow-600 hover:bg-yellow-700"
-                            >
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Aguardando Conexão
-                            </Button>
-                          )}
                         </div>
                       </div>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Zap className="w-8 h-8 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Nenhuma instância encontrada
-                </h3>
-                <p className="text-gray-600">
-                  Crie uma instância do WhatsApp para vê-la aqui
-                </p>
-              </div>
             )}
           </div>
         )}
 
-        {/* Modal para WhatsApp Cloud API */}
+      {/* Modal de Nova Conexão */}
         <NewConnectionModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           onSave={handleSaveConnection}
         />
 
-        {/* Modal para QR Code do WhatsApp */}
-        <Dialog open={showQRModal} onOpenChange={setShowQRModal}>
-          <DialogContent className="sm:max-w-md">
+      {/* Modal de Progresso */}
+      <Dialog open={showProgressModal} onOpenChange={setShowProgressModal}>
+        <DialogContent>
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Zap className="w-5 h-5 text-green-600" />
-                Conectar WhatsApp
-              </DialogTitle>
+            <DialogTitle>Criando Instância WhatsApp</DialogTitle>
               <DialogDescription>
-                Escaneie o QR Code abaixo com seu WhatsApp para conectar a instância.
+              Aguarde enquanto criamos sua instância...
               </DialogDescription>
             </DialogHeader>
-            
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>{progressMessage}</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${(progressStep / 5) * 100}%` }}
+              />
+            </div>
+            <p className="text-sm text-gray-500">
+              Etapa {progressStep} de 5
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de QR Code */}
+      <Dialog open={showQRModal} onOpenChange={setShowQRModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Conectar WhatsApp</DialogTitle>
+            <DialogDescription>
+              Escaneie o QR Code com seu WhatsApp para conectar
+            </DialogDescription>
+          </DialogHeader>
             <div className="flex flex-col items-center space-y-4">
               {qrCodeData ? (
                 <div className="p-4 bg-white rounded-lg border-2 border-gray-200">
                   <img 
                     src={qrCodeData} 
-                    alt="QR Code para conectar WhatsApp"
-                    className="w-64 h-64 mx-auto"
-                    onLoad={() => console.log('✅ QR Code carregado com sucesso')}
-                    onError={(e) => console.error('❌ Erro ao carregar QR Code:', e)}
+                  alt="QR Code WhatsApp" 
+                  className="w-64 h-64"
                   />
                 </div>
               ) : (
-                <div className="w-64 h-64 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+              <div className="flex items-center space-x-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Gerando QR Code...</span>
                 </div>
               )}
-              
-              <div className="text-center text-sm text-gray-600">
-                <p>1. Abra o WhatsApp no seu celular</p>
-                <p>2. Toque em <strong>Menu</strong> ou <strong>Configurações</strong></p>
-                <p>3. Toque em <strong>Dispositivos conectados</strong></p>
-                <p>4. Toque em <strong>Conectar um dispositivo</strong></p>
-                <p>5. Escaneie este QR Code</p>
-              </div>
-              
-              <div className="text-center">
-                <p className="text-sm text-gray-600 mb-4">
-                  ⏳ O modal fechará automaticamente quando o WhatsApp conectar
-                </p>
-                <Button 
-                  onClick={handleCloseQRModal}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <X className="w-4 h-4 mr-2" />
-                  Fechar
-                </Button>
-              </div>
+            <p className="text-sm text-gray-500 text-center">
+              Abra o WhatsApp no seu celular, toque em Menu ou Configurações e selecione "Dispositivos conectados"
+            </p>
             </div>
           </DialogContent>
         </Dialog>
 
-        {/* Modal de Progresso */}
-        <Dialog open={showProgressModal} onOpenChange={() => {}}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
-                Criando Instância WhatsApp
-              </DialogTitle>
-              <DialogDescription>
-                Aguarde enquanto configuramos sua instância...
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-6">
-              {/* Barra de Progresso */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Progresso</span>
-                  <span>{Math.round((progressStep / 6) * 100)}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-500 ease-out"
-                    style={{ width: `${(progressStep / 6) * 100}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Etapas */}
-              <div className="space-y-3">
-                {[
-                  { step: 1, text: 'Criando nova instância Disparai no servidor...', icon: '🚀' },
-                  { step: 2, text: 'Instância criada com sucesso!', icon: '✅' },
-                  { step: 3, text: 'Salvando instância WhatsApp no banco...', icon: '💾' },
-                  { step: 4, text: 'Instância WhatsApp salva!', icon: '✅' },
-                  { step: 5, text: 'Gerando QR Code para conectar WhatsApp...', icon: '📱' },
-                  { step: 6, text: 'Instância criada! Leia o QR Code e comece a disparar!', icon: '🎉' }
-                ].map((item, index) => (
-                  <div 
-                    key={item.step}
-                    className={`flex items-center gap-3 p-3 rounded-lg transition-all duration-300 ${
-                      progressStep >= item.step 
-                        ? 'bg-green-50 border border-green-200' 
-                        : 'bg-gray-50 border border-gray-200'
-                    }`}
-                  >
-                    <div className={`text-lg ${progressStep >= item.step ? 'opacity-100' : 'opacity-50'}`}>
-                      {item.icon}
-                    </div>
-                    <div className="flex-1">
-                      <p className={`text-sm font-medium ${
-                        progressStep >= item.step ? 'text-green-800' : 'text-gray-600'
-                      }`}>
-                        {item.text}
-                      </p>
-                    </div>
-                    {progressStep > item.step && (
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                    )}
-                    {progressStep === item.step && (
-                      <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Mensagem Atual */}
-              {progressMessage && (
-                <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-sm text-blue-800 font-medium">{progressMessage}</p>
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+      {/* Componente de Conexão WhatsApp */}
+      {showDisparaiConnection && user && (
+        <SimpleWhatsAppConnection
+          userId={user.id}
+          userName={(user as any).full_name || user.email || 'Usuário'}
+          qrCodeData={qrCodeData}
+          onConnected={handleConnected}
+          onError={(error) => {
+            console.error('Erro na conexão:', error);
+            toast.error(error);
+          }}
+        />
+      )}
     </div>
   );
 }

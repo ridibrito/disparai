@@ -7,6 +7,9 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import Link from 'next/link';
 import Image from 'next/image';
+import PasswordInput from '@/components/ui/password-input';
+import ErrorMessage from '@/components/ui/error-message';
+import { getAuthErrorMessage } from '@/lib/auth-errors';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -42,7 +45,7 @@ export default function LoginForm() {
       }
     } catch (error: any) {
       console.error('Erro ao fazer login:', error);
-      setError(error.message || 'Email ou senha incorretos. Por favor, tente novamente.');
+      setError(getAuthErrorMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -71,9 +74,10 @@ export default function LoginForm() {
 
           {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 text-sm text-red-700 bg-red-100 border border-red-200 rounded-md">
-              {error}
-            </div>
+            <ErrorMessage 
+              message={error} 
+              onDismiss={() => setError(null)}
+            />
           )}
 
           {/* Form */}
@@ -102,14 +106,13 @@ export default function LoginForm() {
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Senha
               </label>
-              <input
+              <PasswordInput
                 id="password"
-                type="password"
                 {...register('password')}
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:border-gray-400 transition-colors"
-                style={{ '--tw-ring-color': '#4bca59' } as any}
                 placeholder="••••••••"
                 disabled={isLoading}
+                style={{ '--tw-ring-color': '#4bca59' } as any}
+                autoComplete="current-password"
               />
               {errors.password && (
                 <p className="text-sm text-red-600 mt-1">{errors.password.message}</p>
