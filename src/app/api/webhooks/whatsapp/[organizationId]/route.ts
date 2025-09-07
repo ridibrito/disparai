@@ -8,18 +8,25 @@ const supabaseAdmin = createClient(
 );
 
 export async function POST(req: Request, { params }: { params: { organizationId: string } }) {
+  const startTime = Date.now();
+  
   try {
     const organizationId = params.organizationId;
     const body = await req.json();
     
-    console.log(`📨 Webhook recebido para organização ${organizationId}:`, body);
+    console.log(`📨 [WEBHOOK] Recebido para organização ${organizationId} em ${new Date().toISOString()}:`, {
+      headers: Object.fromEntries(req.headers.entries()),
+      body: body
+    });
 
     const { instanceKey, event, data } = body;
 
     if (!instanceKey) {
-      console.error('❌ instanceKey não fornecido no webhook');
+      console.error('❌ [WEBHOOK] instanceKey não fornecido no webhook');
       return NextResponse.json({ error: 'instanceKey é obrigatório' }, { status: 400 });
     }
+
+    console.log(`🔍 [WEBHOOK] Processando evento '${event}' para instância '${instanceKey}'`);
 
     // Verificar se a instância pertence à organização correta
     const { data: instance, error: instanceError } = await supabaseAdmin
@@ -55,12 +62,28 @@ export async function POST(req: Request, { params }: { params: { organizationId:
         console.log(`ℹ️ Evento não processado: ${event}`);
     }
 
-    return NextResponse.json({ success: true });
+    const processingTime = Date.now() - startTime;
+    console.log(`✅ [WEBHOOK] Processado com sucesso em ${processingTime}ms para instância ${instanceKey}`);
+    
+    return NextResponse.json({ 
+      success: true,
+      processing_time_ms: processingTime,
+      timestamp: new Date().toISOString()
+    });
 
   } catch (error) {
-    console.error('❌ Erro no webhook:', error);
+    const processingTime = Date.now() - startTime;
+    console.error(`❌ [WEBHOOK] Erro ao processar webhook em ${processingTime}ms:`, {
+      error: error instanceof Error ? error.message : 'Erro desconhecido',
+      stack: error instanceof Error ? error.stack : undefined,
+      organizationId: params.organizationId,
+      timestamp: new Date().toISOString()
+    });
+    
     return NextResponse.json({ 
-      error: error instanceof Error ? error.message : 'Erro desconhecido' 
+      error: error instanceof Error ? error.message : 'Erro desconhecido',
+      processing_time_ms: processingTime,
+      timestamp: new Date().toISOString()
     }, { status: 500 });
   }
 }

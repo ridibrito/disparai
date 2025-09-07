@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from '@/lib/supabaseServer';
 import { createClient } from "@supabase/supabase-js";
-import { MegaAPI } from "@/lib/mega-api";
 
 // Cliente admin para operações que precisam de mais permissões
 const supabaseAdmin = createClient(
@@ -9,7 +8,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function DELETE(req: Request) {
+export async function POST(req: Request) {
   try {
     const { instanceKey } = await req.json();
 
@@ -34,33 +33,9 @@ export async function DELETE(req: Request) {
       console.log('⚠️ Usuário não autenticado, usando service role para operação');
     }
 
-    console.log(`🗑️ Deletando instância: ${instanceKey}`);
+    console.log(`🔄 Reiniciando instância: ${instanceKey}`);
 
-    // 1. Deletar da tabela whatsapp_instances
-    const { error: instanceDeleteError } = await supabaseAdmin
-      .from('whatsapp_instances')
-      .delete()
-      .eq('instance_key', instanceKey);
-
-    if (instanceDeleteError) {
-      console.error('❌ Erro ao deletar instância do Supabase:', instanceDeleteError);
-    } else {
-      console.log('✅ Instância deletada do Supabase');
-    }
-
-    // 2. Deletar da tabela api_connections
-    const { error: connectionDeleteError } = await supabaseAdmin
-      .from('api_connections')
-      .delete()
-      .eq('instance_id', instanceKey);
-
-    if (connectionDeleteError) {
-      console.error('❌ Erro ao deletar conexão do Supabase:', connectionDeleteError);
-    } else {
-      console.log('✅ Conexão deletada do Supabase');
-    }
-
-    // 3. Desconectar da MegaAPI (já que não podemos deletar completamente)
+    // 1. Reiniciar na MegaAPI
     try {
       const host = process.env.MEGA_API_HOST || 'https://teste8.megaapi.com.br';
       const token = process.env.MEGA_API_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
@@ -73,9 +48,9 @@ export async function DELETE(req: Request) {
         megaApiKey = 'coruss_596274e5_575766';
       }
 
-      console.log(`🗑️ Deletando instância ${megaApiKey} da MegaAPI...`);
+      console.log(`🔄 Reiniciando instância ${megaApiKey} na MegaAPI...`);
       
-      const megaApiResponse = await fetch(`${host}/rest/instance/${megaApiKey}/delete`, {
+      const megaApiResponse = await fetch(`${host}/rest/instance/${megaApiKey}/restart`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -84,23 +59,46 @@ export async function DELETE(req: Request) {
 
       if (megaApiResponse.ok) {
         const responseText = await megaApiResponse.text();
-        console.log('✅ Instância deletada da MegaAPI:', responseText);
+        console.log('✅ Instância reiniciada na MegaAPI:', responseText);
+        
+        // 2. Atualizar status no banco de dados
+        const { error: updateError } = await supabaseAdmin
+          .from('whatsapp_instances')
+          .update({ 
+            status: 'ativo',
+            updated_at: new Date().toISOString()
+          })
+          .eq('instance_key', instanceKey);
+
+        if (updateError) {
+          console.error('❌ Erro ao atualizar status no Supabase:', updateError);
+        } else {
+          console.log('✅ Status atualizado no Supabase');
+        }
+
+        return NextResponse.json({ 
+          ok: true, 
+          message: `Instância ${instanceKey} reiniciada com sucesso`,
+          instance_key: instanceKey
+        });
       } else {
         const errorText = await megaApiResponse.text();
-        console.log(`❌ Erro ao deletar da MegaAPI: ${megaApiResponse.status} - ${errorText}`);
+        console.log(`❌ Erro ao reiniciar na MegaAPI: ${megaApiResponse.status} - ${errorText}`);
+        return NextResponse.json({ 
+          ok: false, 
+          error: `Erro ao reiniciar instância: ${errorText}` 
+        }, { status: megaApiResponse.status });
       }
     } catch (megaApiError) {
       console.log('⚠️ Erro ao conectar com MegaAPI:', megaApiError);
+      return NextResponse.json({ 
+        ok: false, 
+        error: 'Erro ao conectar com servidor WhatsApp' 
+      }, { status: 500 });
     }
 
-    return NextResponse.json({ 
-      ok: true, 
-      message: `Instância ${instanceKey} deletada com sucesso`,
-      instance_key: instanceKey
-    });
-
   } catch (error) {
-    console.error('❌ Erro ao deletar instância:', error);
+    console.error('❌ Erro ao reiniciar instância:', error);
     return NextResponse.json({ 
       ok: false, 
       error: error instanceof Error ? error.message : 'Erro desconhecido' 

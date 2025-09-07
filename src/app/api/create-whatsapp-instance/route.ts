@@ -68,29 +68,29 @@ export async function POST(req: Request) {
     }
 
     // Gerar nome único para a instância baseado no nome da organização + número sequencial
-    // Formato: {organizationName}_{numero}
+    // Formato: {organizationName}-whatsapp-{numero}
     const cleanOrgName = organizationName
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '') // Remove caracteres especiais
-      .substring(0, 15); // Limita a 15 caracteres
-    
+      .substring(0, 12); // Limita a 12 caracteres para deixar espaço para "-whatsapp-XX"
+
     // Buscar o próximo número sequencial disponível para esta organização
     let instanceNumber = 1;
     let finalInstanceName = instanceName;
-    
+
     if (!instanceName) {
       // Buscar instâncias existentes desta organização para determinar o próximo número
       const { data: existingInstances } = await supabaseAdmin
         .from('whatsapp_instances')
         .select('instance_key')
         .eq('organization_id', validOrgId)
-        .like('instance_key', `${cleanOrgName}_%`);
+        .like('instance_key', `${cleanOrgName}-whatsapp-%`);
       
       if (existingInstances && existingInstances.length > 0) {
         // Extrair números das instâncias existentes e encontrar o próximo
         const numbers = existingInstances
           .map(inst => {
-            const match = inst.instance_key.match(new RegExp(`${cleanOrgName}_(\\d+)$`));
+            const match = inst.instance_key.match(new RegExp(`${cleanOrgName}-whatsapp-(\\d+)$`));
             return match ? parseInt(match[1]) : 0;
           })
           .filter(num => num > 0);
@@ -100,7 +100,7 @@ export async function POST(req: Request) {
         }
       }
       
-      finalInstanceName = `${cleanOrgName}_${instanceNumber.toString().padStart(2, '0')}`;
+      finalInstanceName = `${cleanOrgName}-whatsapp-${instanceNumber.toString().padStart(2, '0')}`;
     }
     
     // Verificar se a instância já existe no Supabase (usando cliente admin)

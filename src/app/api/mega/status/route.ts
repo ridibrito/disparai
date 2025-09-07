@@ -12,12 +12,41 @@ export async function GET(req: Request) {
     const host = process.env.MEGA_API_HOST || 'https://teste8.megaapi.com.br';
     const token = process.env.MEGA_API_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
 
-    const r = await fetch(`${host}/rest/instance/${instanceKey}`, {
+    // Primeiro, listar todas as instâncias para encontrar a correta
+    const listResponse = await fetch(`${host}/rest/instance/list`, {
       headers: { "Authorization": `Bearer ${token}` }
     });
 
-    const data = await r.json();
-    return NextResponse.json({ ok: r.ok, data }, { status: r.status });
+    if (!listResponse.ok) {
+      return NextResponse.json({ ok: false, error: "Erro ao listar instâncias" }, { status: listResponse.status });
+    }
+
+    const listData = await listResponse.json();
+    
+    // Procurar a instância específica na lista
+    const targetInstance = listData.instances?.find((inst: any) => {
+      // Mapear nomes novos para nomes antigos
+      if (instanceKey === 'coruss-whatsapp-01') {
+        return inst.key === 'coruss_596274e5';
+      } else if (instanceKey === 'coruss-whatsapp-02') {
+        return inst.key === 'coruss_596274e5_575766';
+      }
+      return inst.key === instanceKey;
+    });
+
+    if (!targetInstance) {
+      return NextResponse.json({ 
+        ok: false, 
+        error: "Instância não encontrada",
+        data: { instance: null }
+      }, { status: 404 });
+    }
+
+    return NextResponse.json({ 
+      ok: true, 
+      data: { instance: targetInstance }
+    });
+
   } catch (error) {
     console.error('❌ Erro ao verificar status:', error);
     return NextResponse.json({ 

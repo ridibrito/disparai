@@ -5,17 +5,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { 
-  MessageCircle, 
-  Zap, 
-  Plus, 
-  CheckCircle, 
+import {
+  MessageCircle,
+  Zap,
+  Plus,
+  CheckCircle,
   AlertCircle,
   Loader2,
   X,
   Circle,
   Copy,
-  Phone
+  Phone,
+  RefreshCw,
+  Trash,
+  RotateCcw
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import SimpleWhatsAppConnection from './SimpleWhatsAppConnection';
@@ -52,6 +55,7 @@ interface WhatsAppInstance {
 export default function SimpleConnectionsTabs() {
   const { user } = useAuth();
   const [connections, setConnections] = useState<ApiConnection[]>([]);
+  
   const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,6 +70,13 @@ export default function SimpleConnectionsTabs() {
   const [progressStep, setProgressStep] = useState(0);
   const [progressMessage, setProgressMessage] = useState('');
   const [currentInstanceKey, setCurrentInstanceKey] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Estados para modais de confirmação
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+  const [selectedConnection, setSelectedConnection] = useState<any>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Função para atualizar progresso
   const updateProgress = (step: number, message: string) => {
@@ -77,35 +88,38 @@ export default function SimpleConnectionsTabs() {
   const formatWhatsAppNumber = (whatsappId: string): string => {
     // Remove o @s.whatsapp.net e extrai apenas o número
     const number = whatsappId.replace('@s.whatsapp.net', '');
-    
+
     // Remove o código do país (55) se presente
     const cleanNumber = number.startsWith('55') ? number.substring(2) : number;
-    
+
     // Aplica máscara brasileira: (XX) XXXXX-XXXX
     if (cleanNumber.length === 11) {
       return `(${cleanNumber.substring(0, 2)}) ${cleanNumber.substring(2, 7)}-${cleanNumber.substring(7)}`;
     } else if (cleanNumber.length === 10) {
       return `(${cleanNumber.substring(0, 2)}) ${cleanNumber.substring(2, 6)}-${cleanNumber.substring(6)}`;
     }
-    
+
     return cleanNumber; // Retorna o número limpo se não conseguir formatar
   };
 
-  // Função para buscar número do WhatsApp conectado
-  const fetchWhatsAppNumber = async (instanceKey: string): Promise<string | null> => {
-    try {
-      const response = await fetch(`/api/mega/status?instanceKey=${instanceKey}`);
-      if (response.ok) {
-        const result = await response.json();
-        if (result.ok && result.data?.instance?.user?.id) {
-          return result.data.instance.user.id;
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao buscar número do WhatsApp:', error);
+  const formatInstanceName = (instanceKey: string): string => {
+    // Converter formato técnico para nome amigável
+    // Ex: coruss-whatsapp-01 → Coruss WhatsApp #01
+    if (instanceKey.includes('-whatsapp-')) {
+      const parts = instanceKey.split('-whatsapp-');
+      const orgName = parts[0];
+      const number = parts[1];
+      
+      // Capitalizar primeira letra da organização
+      const capitalizedOrg = orgName.charAt(0).toUpperCase() + orgName.slice(1);
+      
+      return `${capitalizedOrg} WhatsApp #${number}`;
     }
-    return null;
+    
+    // Se não for formato novo, retornar como está
+    return instanceKey;
   };
+
 
   // Função para verificar status da instância periodicamente
   const checkInstanceStatus = async (instanceKey: string): Promise<boolean> => {
@@ -380,59 +394,42 @@ export default function SimpleConnectionsTabs() {
         console.log('📱 [DEBUG] Dados completos da API:', instancesData);
         console.log('📱 Instâncias WhatsApp encontradas:', instancesData.instances?.length || 0);
         
-        // Buscar conexões da tabela api_connections para verificar status de conexão (com timestamp para evitar cache)
-        const connectionsResponse = await fetch(`/api/connections-v2?t=${Date.now()}`);
-        let apiConnections: any[] = [];
-        
-        if (connectionsResponse.ok) {
-          const connectionsData = await connectionsResponse.json();
-          apiConnections = connectionsData.data || [];
-          console.log('🔗 [DEBUG] Conexões API encontradas:', apiConnections.length);
-        }
+        // Status agora é verificado diretamente do servidor MegaAPI
         
         // Converter instâncias WhatsApp para formato de conexões
         const whatsappConnections = await Promise.all((instancesData.instances || []).map(async (instance: any) => {
-          // Verificar se existe uma conexão ativa correspondente na api_connections
-          const correspondingConnection = apiConnections.find(conn => {
-            const matchByInstanceId = conn.instance_id === instance.instance_key;
-            const matchByName = conn.name?.includes(instance.instance_key);
-            // Log apenas se não encontrar correspondência
-            if (!matchByInstanceId && !matchByName) {
-              console.log(`⚠️ [DEBUG] Nenhuma correspondência encontrada para ${instance.instance_key}:`, {
-                conn_instance_id: conn.instance_id,
-                conn_name: conn.name
-              });
-            }
-            return matchByInstanceId || matchByName;
-          });
-          
-          // Log resumido da correspondência
-          console.log(`🔍 [DEBUG] ${instance.instance_key}:`, {
-            found_corresponding: !!correspondingConnection,
-            corresponding_status: correspondingConnection?.status || 'none'
-          });
-          
-          // Determinar status baseado em ambas as tabelas
-          let finalStatus = 'disconnected';
-          if (instance.status === 'ativo') {
-            if (correspondingConnection && correspondingConnection.status === 'active') {
-              finalStatus = 'connected'; // WhatsApp conectado via QR Code
-            } else {
-              finalStatus = 'active'; // Instância ativa mas não conectada
-            }
-          }
-          
-          console.log(`✅ [DEBUG] ${instance.instance_key}: ${instance.status} + ${correspondingConnection?.status || 'none'} = ${finalStatus}`);
-          
-          // Buscar número do WhatsApp se estiver conectado
+          // Verificar status real do servidor MegaAPI
+          let serverStatus = 'disconnected';
           let whatsappNumber = null;
-          if (finalStatus === 'connected') {
-            whatsappNumber = await fetchWhatsAppNumber(instance.instance_key);
+          
+          try {
+            const statusResponse = await fetch(`/api/mega/status?instanceKey=${instance.instance_key}`);
+            if (statusResponse.ok) {
+              const statusData = await statusResponse.json();
+              if (statusData.ok && statusData.data?.instance?.status) {
+                serverStatus = statusData.data.instance.status;
+                if (serverStatus === 'connected' && statusData.data.instance.user?.id) {
+                  whatsappNumber = statusData.data.instance.user.id;
+                }
+              }
+            }
+          } catch (error) {
+            console.error(`Erro ao verificar status do servidor para ${instance.instance_key}:`, error);
           }
+          
+          // Determinar status final: apenas Conectado ou Desconectado
+          let finalStatus = 'disconnected';
+          if (instance.status === 'ativo' && serverStatus === 'connected') {
+            finalStatus = 'connected'; // WhatsApp conectado via QR Code
+          } else {
+            finalStatus = 'disconnected'; // Instância existe mas WhatsApp não conectado
+          }
+          
+          console.log(`✅ [DEBUG] ${instance.instance_key}: instância=${instance.status}, servidor=${serverStatus} → final=${finalStatus}`);
           
           return {
             id: instance.id,
-            name: instance.instance_key,
+            name: formatInstanceName(instance.instance_key),
             type: 'whatsapp_disparai',
             status: finalStatus,
             instance_key: instance.instance_key,
@@ -442,7 +439,7 @@ export default function SimpleConnectionsTabs() {
             monthlyLimit: 1000,
             is_whatsapp_instance: true,
             whatsapp_status: instance.status,
-            api_connection_status: correspondingConnection?.status,
+            api_connection_status: serverStatus,
             webhook_url: instance.webhook_url,
             whatsapp_number: whatsappNumber
           };
@@ -511,27 +508,43 @@ export default function SimpleConnectionsTabs() {
     }
   };
 
-  const handleDeleteConnection = async (connectionId: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta conexão?')) {
-      return;
-    }
+  const handleDeleteConnection = (connection: any) => {
+    setSelectedConnection(connection);
+    setShowDeleteConfirm(true);
+  };
 
+  const confirmDeleteConnection = async () => {
+    if (!selectedConnection) return;
+
+    setIsProcessing(true);
     try {
-      const response = await fetch(`/api/connections/${connectionId}`, {
+      console.log('🗑️ Excluindo instância:', selectedConnection.instance_key);
+      
+      const response = await fetch('/api/delete-whatsapp-instance', {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instanceKey: selectedConnection.instance_key
+        })
       });
 
       const data = await response.json();
 
-      if (response.ok) {
-        toast.success(data.message || 'Conexão excluída com sucesso!');
+      if (response.ok && data.ok) {
+        toast.success(data.message || 'Instância excluída com sucesso!');
         await loadConnections(); // Recarregar lista
+        setShowDeleteConfirm(false);
+        setSelectedConnection(null);
       } else {
-        toast.error(data.error || 'Erro ao excluir conexão');
+        toast.error(data.error || 'Erro ao excluir instância');
       }
     } catch (error) {
-      console.error('Error deleting connection:', error);
-      toast.error('Erro ao excluir conexão');
+      console.error('Error deleting instance:', error);
+      toast.error('Erro ao excluir instância');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -561,32 +574,106 @@ export default function SimpleConnectionsTabs() {
   };
 
   // Função para desconectar instância
-  const handleDisconnectInstance = async (connection: any) => {
+  const handleDisconnectInstance = (connection: any) => {
+    setSelectedConnection(connection);
+    setShowDisconnectConfirm(true);
+  };
+
+  const confirmDisconnectInstance = async () => {
+    if (!selectedConnection) return;
+
+    setIsProcessing(true);
     try {
-      console.log('🔌 Desconectando instância:', connection.instance_key);
+      console.log('🔌 Desconectando instância:', selectedConnection.instance_key);
       
-      // Atualizar status na api_connections para 'pending'
-      const response = await fetch('/api/update-instance-status', {
-        method: 'POST',
+      // 1. Desconectar do servidor MegaAPI
+      const host = process.env.NEXT_PUBLIC_MEGA_API_HOST || 'https://teste8.megaapi.com.br';
+      const token = process.env.NEXT_PUBLIC_MEGA_API_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
+      
+      // Mapear nomes novos para nomes antigos da MegaAPI
+      let megaApiKey = selectedConnection.instance_key;
+      if (selectedConnection.instance_key === 'coruss-whatsapp-01') {
+        megaApiKey = 'coruss_596274e5';
+      } else if (selectedConnection.instance_key === 'coruss-whatsapp-02') {
+        megaApiKey = 'coruss_596274e5_575766';
+      }
+
+      console.log(`🔌 Desconectando ${megaApiKey} da MegaAPI...`);
+      
+      const megaApiResponse = await fetch(`${host}/rest/instance/${megaApiKey}/logout`, {
+        method: 'DELETE',
         headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          instanceKey: connection.instance_key,
-          status: 'pending'
-        }),
+          'Authorization': `Bearer ${token}`
+        }
       });
 
-      if (response.ok) {
-        toast.success('Instância desconectada com sucesso!');
-        await loadConnections(); // Recarregar lista
+      if (megaApiResponse.ok) {
+        console.log('✅ Instância desconectada da MegaAPI');
+        
+        // 2. Atualizar status no banco de dados
+        const response = await fetch('/api/update-instance-status', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            instanceKey: selectedConnection.instance_key,
+            status: 'desconectado'
+          }),
+        });
+
+        if (response.ok) {
+          toast.success('Instância desconectada com sucesso!');
+          await loadConnections(); // Recarregar lista
+          setShowDisconnectConfirm(false);
+          setSelectedConnection(null);
+        } else {
+          toast.error('Erro ao atualizar status no banco de dados');
+        }
       } else {
-        toast.error('Erro ao desconectar instância');
+        const errorText = await megaApiResponse.text();
+        console.error('❌ Erro ao desconectar da MegaAPI:', errorText);
+        toast.error('Erro ao desconectar do servidor WhatsApp');
       }
       
     } catch (error) {
       console.error('Erro ao desconectar instância:', error);
       toast.error('Erro ao desconectar instância');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Função para reiniciar instância
+  const handleRestartInstance = async (connection: any) => {
+    if (!confirm('Tem certeza que deseja reiniciar esta instância?')) {
+      return;
+    }
+
+    try {
+      console.log('🔄 Reiniciando instância:', connection.instance_key);
+      
+      const response = await fetch('/api/restart-whatsapp-instance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instanceKey: connection.instance_key
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.ok) {
+        toast.success('Instância reiniciada com sucesso!');
+        await loadConnections(); // Recarregar lista
+      } else {
+        toast.error(data.error || 'Erro ao reiniciar instância');
+      }
+    } catch (error) {
+      console.error('Error restarting instance:', error);
+      toast.error('Erro ao reiniciar instância');
     }
   };
 
@@ -601,6 +688,43 @@ export default function SimpleConnectionsTabs() {
     }
   };
 
+  // Função para sincronizar status das instâncias
+  const handleSyncStatus = async () => {
+    try {
+      setIsSyncing(true);
+      console.log('🔄 Iniciando sincronização manual de status...');
+      
+      const response = await fetch('/api/sync-instance-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro na sincronização: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('✅ Sincronização concluída:', result);
+        toast.success(`Status sincronizado! ${result.synced} instância(s) atualizada(s)`);
+        
+        // Recarregar conexões para mostrar os status atualizados
+        await loadConnections();
+      } else {
+        throw new Error(result.error || 'Erro na sincronização');
+      }
+
+    } catch (error) {
+      console.error('❌ Erro na sincronização:', error);
+      toast.error('Erro ao sincronizar status das instâncias');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   // Filtrar conexões por tipo
   const disparaiConnections = connections.filter(conn => conn.type === 'whatsapp_disparai');
   const cloudConnections = connections.filter(conn => conn.type === 'whatsapp_cloud');
@@ -612,8 +736,6 @@ export default function SimpleConnectionsTabs() {
     switch (status) {
       case 'connected':
         return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case 'active':
-        return <CheckCircle className="w-4 h-4 text-blue-500" />;
       case 'disconnected':
       case 'inactive':
         return <AlertCircle className="w-4 h-4 text-red-500" />;
@@ -637,10 +759,6 @@ export default function SimpleConnectionsTabs() {
               </span>
             )}
           </div>
-        );
-      case 'active':
-        return (
-          <Badge className="bg-blue-100 text-blue-800 border-blue-200">Instância Ativa</Badge>
         );
       case 'disconnected':
       case 'inactive':
@@ -673,22 +791,34 @@ export default function SimpleConnectionsTabs() {
 
     switch (connection.status) {
       case 'connected':
-        // Conectado: mostrar botão Desconectar
+        // Conectado: mostrar botões Desconectar e Reiniciar
         buttons.push(
           <Button
             key="disconnect"
             variant="outline"
             size="sm"
             onClick={() => handleDisconnectInstance(connection)}
-            className="text-red-600 border-red-200 hover:bg-red-50"
+            className="text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400"
           >
             Desconectar WhatsApp
           </Button>
         );
+        buttons.push(
+          <Button
+            key="restart"
+            variant="outline"
+            size="sm"
+            onClick={() => handleRestartInstance(connection)}
+            className="text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400"
+          >
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Reiniciar
+          </Button>
+        );
         break;
-        
-      case 'active':
-        // Ativo: mostrar botão Conectar (QR Code)
+
+      case 'disconnected':
+        // Desconectado: mostrar botões Conectar, Reiniciar e Excluir
         buttons.push(
           <Button
             key="connect"
@@ -700,35 +830,33 @@ export default function SimpleConnectionsTabs() {
             Conectar WhatsApp
           </Button>
         );
-        break;
-        
-      case 'disconnected':
-        // Desconectado: mostrar botões Conectar e Deletar
         buttons.push(
           <Button
-            key="connect"
+            key="restart"
             variant="outline"
             size="sm"
-            onClick={() => handleConnectInstance(connection)}
-            className="text-green-600 border-green-200 hover:bg-green-50"
+            onClick={() => handleRestartInstance(connection)}
+            className="text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400"
           >
-            Conectar WhatsApp
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Reiniciar
           </Button>
         );
         break;
     }
 
-    // Sempre mostrar botão Deletar (exceto quando conectado)
+    // Sempre mostrar botão Excluir (exceto quando conectado) - fundo vermelho sólido
     if (connection.status !== 'connected') {
       buttons.push(
         <Button
           key="delete"
-          variant="outline"
+          variant="destructive"
           size="sm"
-          onClick={() => handleDeleteConnection(connection.id)}
-          className="text-red-600 border-red-200 hover:bg-red-50"
+          onClick={() => handleDeleteConnection(connection)}
+          className="bg-red-600 hover:bg-red-700 text-white border-0"
         >
-          Cancelar Instância
+          <Trash className="w-4 h-4 mr-2" />
+          Excluir
         </Button>
       );
     }
@@ -828,7 +956,28 @@ export default function SimpleConnectionsTabs() {
           {/* Lista de conexões Disparai */}
           {disparaiConnections.length > 0 ? (
             <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">Conexões WhatsApp</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900">Conexões WhatsApp</h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSyncStatus}
+                  disabled={isSyncing}
+                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                >
+                  {isSyncing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Sincronizando...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Sincronizar Status
+                    </>
+                  )}
+                </Button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {disparaiConnections.map((connection) => (
                   <Card key={connection.id} className="border border-gray-200 hover:border-gray-300 transition-colors">
@@ -1043,6 +1192,135 @@ export default function SimpleConnectionsTabs() {
           }}
         />
       )}
+
+      {/* Modal de Confirmação para Exclusão */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash className="w-5 h-5" />
+              Confirmar Exclusão
+            </DialogTitle>
+            <DialogDescription>
+              Esta ação é <strong>irreversível</strong> e removerá completamente a instância.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-red-800">
+                    Instância: <span className="font-mono">{selectedConnection?.instance_key}</span>
+                  </p>
+                  <p className="text-sm text-red-700">
+                    A instância será removida de:
+                  </p>
+                  <ul className="text-sm text-red-700 list-disc list-inside space-y-1">
+                    <li>Servidor MegaAPI</li>
+                    <li>Banco de dados Supabase</li>
+                    <li>Interface do sistema</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setSelectedConnection(null);
+                }}
+                disabled={isProcessing}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmDeleteConnection}
+                disabled={isProcessing}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Excluindo...
+                  </>
+                ) : (
+                  <>
+                    <Trash className="w-4 h-4 mr-2" />
+                    Excluir Definitivamente
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação para Desconexão */}
+      <Dialog open={showDisconnectConfirm} onOpenChange={setShowDisconnectConfirm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <AlertCircle className="w-5 h-5" />
+              Confirmar Desconexão
+            </DialogTitle>
+            <DialogDescription>
+              Esta ação desconectará a instância do WhatsApp, mas a manterá no sistema.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-orange-800">
+                    Instância: <span className="font-mono">{selectedConnection?.instance_key}</span>
+                  </p>
+                  <p className="text-sm text-orange-700">
+                    A instância será desconectada do WhatsApp, mas permanecerá ativa para reconexão.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDisconnectConfirm(false);
+                  setSelectedConnection(null);
+                }}
+                disabled={isProcessing}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="outline"
+                onClick={confirmDisconnectInstance}
+                disabled={isProcessing}
+                className="text-orange-600 border-orange-300 hover:bg-orange-50 hover:border-orange-400"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Desconectando...
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="w-4 h-4 mr-2" />
+                    Desconectar WhatsApp
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
