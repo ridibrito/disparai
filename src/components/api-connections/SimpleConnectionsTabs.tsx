@@ -14,7 +14,8 @@ import {
   Loader2,
   X,
   Circle,
-  Copy
+  Copy,
+  Phone
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import SimpleWhatsAppConnection from './SimpleWhatsAppConnection';
@@ -70,6 +71,24 @@ export default function SimpleConnectionsTabs() {
   const updateProgress = (step: number, message: string) => {
     setProgressStep(step);
     setProgressMessage(message);
+  };
+
+  // Função para formatar número do WhatsApp para máscara brasileira
+  const formatWhatsAppNumber = (whatsappId: string): string => {
+    // Remove o @s.whatsapp.net e extrai apenas o número
+    const number = whatsappId.replace('@s.whatsapp.net', '');
+    
+    // Remove o código do país (55) se presente
+    const cleanNumber = number.startsWith('55') ? number.substring(2) : number;
+    
+    // Aplica máscara brasileira: (XX) XXXXX-XXXX
+    if (cleanNumber.length === 11) {
+      return `(${cleanNumber.substring(0, 2)}) ${cleanNumber.substring(2, 7)}-${cleanNumber.substring(7)}`;
+    } else if (cleanNumber.length === 10) {
+      return `(${cleanNumber.substring(0, 2)}) ${cleanNumber.substring(2, 6)}-${cleanNumber.substring(6)}`;
+    }
+    
+    return cleanNumber; // Retorna o número limpo se não conseguir formatar
   };
 
   // Função para buscar número do WhatsApp conectado
@@ -412,11 +431,11 @@ export default function SimpleConnectionsTabs() {
           }
           
           return {
-          id: instance.id,
-          name: `WhatsApp Disparai - ${instance.instance_key}`,
-          type: 'whatsapp_disparai',
+            id: instance.id,
+            name: instance.instance_key,
+            type: 'whatsapp_disparai',
             status: finalStatus,
-          instance_key: instance.instance_key,
+            instance_key: instance.instance_key,
             createdAt: instance.created_at,
             lastUsed: instance.updated_at,
             messageCount: 0,
@@ -612,7 +631,10 @@ export default function SimpleConnectionsTabs() {
           <div className="flex flex-col items-center space-y-1">
             <Badge className="bg-green-100 text-green-800 border-green-200">WhatsApp Conectado</Badge>
             {connection?.whatsapp_number && (
-              <span className="text-xs text-green-600">📱 {connection.whatsapp_number}</span>
+              <span className="text-xs text-green-600 flex items-center gap-1">
+                <Phone className="w-3 h-3" />
+                {formatWhatsAppNumber(connection.whatsapp_number)}
+              </span>
             )}
           </div>
         );
@@ -731,8 +753,8 @@ export default function SimpleConnectionsTabs() {
         {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Conexões de API</h2>
-          <p className="text-gray-600">Gerencie suas integrações com WhatsApp</p>
+          <h2 className="text-2xl font-semibold text-gray-900">Conexões de API</h2>
+          <p className="text-gray-600 mt-1">Gerencie suas integrações com WhatsApp</p>
         </div>
         <Button onClick={() => setIsModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
@@ -770,20 +792,20 @@ export default function SimpleConnectionsTabs() {
 
       {/* Content */}
         {activeTab === 'disparai' && (
-              <div className="space-y-4">
+              <div className="space-y-6">
           {/* Botão para criar nova instância */}
           <Card>
-                    <CardHeader>
+            <CardHeader>
               <CardTitle className="flex items-center">
                 <Zap className="w-5 h-5 mr-2 text-green-500" />
                 Disparai API (Unofficial)
               </CardTitle>
-                            <CardDescription>
+              <CardDescription>
                 Conecte sua conta WhatsApp usando a API não oficial do Disparai
-                            </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                            <Button 
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button 
                 onClick={createNewInstance}
                 disabled={isCreatingInstance}
                 className="w-full"
@@ -800,20 +822,20 @@ export default function SimpleConnectionsTabs() {
                   </>
                 )}
               </Button>
-                    </CardContent>
-                  </Card>
+            </CardContent>
+          </Card>
 
           {/* Lista de conexões Disparai */}
           {disparaiConnections.length > 0 ? (
-            <div className="space-y-3">
-              <h3 className="text-lg font-semibold">Conexões WhatsApp</h3>
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-gray-900">Conexões WhatsApp</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {disparaiConnections.map((connection) => (
                   <Card key={connection.id} className="border border-gray-200 hover:border-gray-300 transition-colors">
                     <CardContent className="p-4">
-                      <div className="space-y-3">
+                      <div className="space-y-4">
                         {/* Header com status e ícone */}
-                      <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-2">
                             {getStatusIcon(connection.status)}
                             <div className="flex flex-col">
@@ -821,11 +843,11 @@ export default function SimpleConnectionsTabs() {
                               <span className="text-xs text-gray-500">
                                 Criado em: {new Date(connection.createdAt).toLocaleDateString('pt-BR')}
                               </span>
+                            </div>
                           </div>
-                        </div>
                           {getStatusBadge(connection.status, connection)}
-                      </div>
-                      
+                        </div>
+                        
                         {/* Webhook URL com botão copiar */}
                         <div className="space-y-1">
                           <p className="text-xs text-gray-600 font-medium">Webhook:</p>
@@ -833,7 +855,7 @@ export default function SimpleConnectionsTabs() {
                             <code className="text-xs bg-gray-100 px-2 py-1 rounded flex-1 truncate">
                               {connection.webhook_url || 'http://localhost:3000/api/webhooks/whatsapp/...'}
                             </code>
-                          <Button 
+                            <Button 
                               variant="outline"
                               size="sm"
                               onClick={() => handleCopyWebhook(connection.webhook_url || 'http://localhost:3000/api/webhooks/whatsapp/...')}
@@ -852,8 +874,8 @@ export default function SimpleConnectionsTabs() {
                     </CardContent>
                   </Card>
                 ))}
-                  </div>
               </div>
+            </div>
             ) : (
             <Card>
               <CardContent className="p-6 text-center">

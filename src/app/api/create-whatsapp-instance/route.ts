@@ -67,16 +67,41 @@ export async function POST(req: Request) {
       organizationName = orgData.company_name;
     }
 
-    // Gerar nome único para a instância baseado no nome da organização + ID + timestamp
-    // Formato: {organizationName}_{organizationId}_{timestamp}
+    // Gerar nome único para a instância baseado no nome da organização + número sequencial
+    // Formato: {organizationName}_{numero}
     const cleanOrgName = organizationName
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '') // Remove caracteres especiais
       .substring(0, 15); // Limita a 15 caracteres
     
-    const orgIdShort = validOrgId.substring(0, 8); // Primeiros 8 caracteres do ID
-    const timestamp = Date.now().toString().slice(-6); // Últimos 6 dígitos do timestamp
-    const finalInstanceName = instanceName || `${cleanOrgName}_${orgIdShort}_${timestamp}`;
+    // Buscar o próximo número sequencial disponível para esta organização
+    let instanceNumber = 1;
+    let finalInstanceName = instanceName;
+    
+    if (!instanceName) {
+      // Buscar instâncias existentes desta organização para determinar o próximo número
+      const { data: existingInstances } = await supabaseAdmin
+        .from('whatsapp_instances')
+        .select('instance_key')
+        .eq('organization_id', validOrgId)
+        .like('instance_key', `${cleanOrgName}_%`);
+      
+      if (existingInstances && existingInstances.length > 0) {
+        // Extrair números das instâncias existentes e encontrar o próximo
+        const numbers = existingInstances
+          .map(inst => {
+            const match = inst.instance_key.match(new RegExp(`${cleanOrgName}_(\\d+)$`));
+            return match ? parseInt(match[1]) : 0;
+          })
+          .filter(num => num > 0);
+        
+        if (numbers.length > 0) {
+          instanceNumber = Math.max(...numbers) + 1;
+        }
+      }
+      
+      finalInstanceName = `${cleanOrgName}_${instanceNumber.toString().padStart(2, '0')}`;
+    }
     
     // Verificar se a instância já existe no Supabase (usando cliente admin)
     const { data: existingInstance, error: checkError } = await supabaseAdmin
