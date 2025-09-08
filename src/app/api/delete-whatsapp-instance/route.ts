@@ -60,20 +60,42 @@ export async function DELETE(req: Request) {
       console.log('✅ Conexão deletada do Supabase');
     }
 
-    // 3. Desconectar da MegaAPI (já que não podemos deletar completamente)
+    // 3. Primeiro desconectar (logout) e depois deletar da MegaAPI
     try {
       const host = process.env.MEGA_API_HOST || 'https://teste8.megaapi.com.br';
       const token = process.env.MEGA_API_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
       
-      // Mapear nomes novos para nomes antigos da MegaAPI
+      // Usar o nome exato da instância
       let megaApiKey = instanceKey;
-      if (instanceKey === 'coruss-whatsapp-01') {
-        megaApiKey = 'coruss_596274e5';
-      } else if (instanceKey === 'coruss-whatsapp-02') {
-        megaApiKey = 'coruss_596274e5_575766';
+      
+      console.log(`🔑 Mapeamento de chave: ${instanceKey} -> ${megaApiKey}`);
+      console.log(`🌐 Host: ${host}`);
+      console.log(`🔐 Token: ${token.substring(0, 20)}...`);
+
+      // Passo 1: Fazer logout primeiro (desconectar WhatsApp)
+      console.log(`🔌 Desconectando instância ${megaApiKey} da MegaAPI...`);
+      const logoutResponse = await fetch(`${host}/rest/instance/${megaApiKey}/logout`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      console.log(`📡 Status do logout: ${logoutResponse.status}`);
+      if (logoutResponse.ok) {
+        const logoutText = await logoutResponse.text();
+        console.log('✅ Instância desconectada da MegaAPI:', logoutText);
+      } else {
+        const logoutError = await logoutResponse.text();
+        console.log(`⚠️ Erro no logout (continuando com delete): ${logoutResponse.status} - ${logoutError}`);
       }
 
+      // Aguardar um pouco para garantir que o logout foi processado
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Passo 2: Deletar a instância completamente
       console.log(`🗑️ Deletando instância ${megaApiKey} da MegaAPI...`);
+      console.log(`🔗 URL: ${host}/rest/instance/${megaApiKey}/delete`);
       
       const megaApiResponse = await fetch(`${host}/rest/instance/${megaApiKey}/delete`, {
         method: 'DELETE',
@@ -82,12 +104,16 @@ export async function DELETE(req: Request) {
         }
       });
 
+      console.log(`📡 Status da resposta MegaAPI: ${megaApiResponse.status}`);
+      console.log(`📡 Headers da resposta:`, Object.fromEntries(megaApiResponse.headers.entries()));
+
       if (megaApiResponse.ok) {
         const responseText = await megaApiResponse.text();
         console.log('✅ Instância deletada da MegaAPI:', responseText);
       } else {
         const errorText = await megaApiResponse.text();
         console.log(`❌ Erro ao deletar da MegaAPI: ${megaApiResponse.status} - ${errorText}`);
+        console.log(`❌ URL que falhou: ${host}/rest/instance/${megaApiKey}/delete`);
       }
     } catch (megaApiError) {
       console.log('⚠️ Erro ao conectar com MegaAPI:', megaApiError);

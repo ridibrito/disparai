@@ -26,7 +26,8 @@ export async function POST(req: Request) {
 
     if (status === 'active') {
       // Status 'active' é para api_connections (conectado via QR Code)
-      const { data, error } = await supabaseAdmin
+      // Primeiro atualizar api_connections
+      const { data: connectionData, error: connectionError } = await supabaseAdmin
         .from('api_connections')
         .update({ 
           status: 'active',
@@ -37,8 +38,22 @@ export async function POST(req: Request) {
         .select()
         .single();
       
-      updatedInstance = data;
-      updateError = error;
+      // Depois atualizar whatsapp_instances para 'ativo'
+      const { data: instanceData, error: instanceError } = await supabaseAdmin
+        .from('whatsapp_instances')
+        .update({ 
+          status: 'ativo',
+          updated_at: new Date().toISOString()
+        })
+        .eq('instance_key', instanceKey)
+        .select()
+        .single();
+      
+      updatedInstance = connectionData;
+      updateError = connectionError || instanceError;
+      
+      console.log('✅ Atualizado api_connections:', connectionData);
+      console.log('✅ Atualizado whatsapp_instances:', instanceData);
     } else {
       // Outros status são para whatsapp_instances
       const { data, error } = await supabaseAdmin

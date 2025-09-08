@@ -49,7 +49,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Redirecionar baseado no evento
       if (event === 'SIGNED_IN') {
         console.log('Usuário logado, redirecionando para dashboard...');
-        router.replace('/dashboard');
+        // Só redireciona se não estiver já na página de login
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+          router.replace('/dashboard');
+        }
       } else if (event === 'SIGNED_OUT') {
         console.log('Usuário deslogado, redirecionando para home...');
         router.replace('/');

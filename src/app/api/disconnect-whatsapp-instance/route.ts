@@ -33,34 +33,39 @@ export async function POST(req: Request) {
       console.log('⚠️ Usuário não autenticado, usando service role para operação');
     }
 
-    console.log(`🔄 Reiniciando instância: ${instanceKey}`);
+    console.log(`🔌 Desconectando instância: ${instanceKey}`);
 
-    // 1. Reiniciar na MegaAPI
+    // 1. Desconectar do servidor MegaAPI
     try {
       const host = process.env.MEGA_API_HOST || 'https://teste8.megaapi.com.br';
       const token = process.env.MEGA_API_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
       
       // Usar o nome exato da instância
       const megaApiKey = instanceKey;
-
-      console.log(`🔄 Reiniciando instância ${megaApiKey} na MegaAPI...`);
       
-      const megaApiResponse = await fetch(`${host}/rest/instance/${megaApiKey}/restart`, {
+      console.log(`🔌 Desconectando ${megaApiKey} da MegaAPI...`);
+      console.log(`🌐 Host: ${host}`);
+      console.log(`🔐 Token: ${token.substring(0, 20)}...`);
+      
+      const megaApiResponse = await fetch(`${host}/rest/instance/${megaApiKey}/logout`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
 
+      console.log(`📡 Status da resposta MegaAPI: ${megaApiResponse.status}`);
+      console.log(`📡 Headers da resposta:`, Object.fromEntries(megaApiResponse.headers.entries()));
+
       if (megaApiResponse.ok) {
         const responseText = await megaApiResponse.text();
-        console.log('✅ Instância reiniciada na MegaAPI:', responseText);
+        console.log('✅ Instância desconectada da MegaAPI:', responseText);
         
         // 2. Atualizar status no banco de dados
         const { error: updateError } = await supabaseAdmin
           .from('whatsapp_instances')
           .update({ 
-            status: 'ativo',
+            status: 'desconectado',
             updated_at: new Date().toISOString()
           })
           .eq('instance_key', instanceKey);
@@ -71,17 +76,33 @@ export async function POST(req: Request) {
           console.log('✅ Status atualizado no Supabase');
         }
 
+        // 3. Atualizar api_connections também
+        const { error: connectionError } = await supabaseAdmin
+          .from('api_connections')
+          .update({ 
+            status: 'inactive',
+            is_active: false,
+            updated_at: new Date().toISOString()
+          })
+          .eq('instance_id', instanceKey);
+
+        if (connectionError) {
+          console.error('❌ Erro ao atualizar api_connections:', connectionError);
+        } else {
+          console.log('✅ api_connections atualizado');
+        }
+
         return NextResponse.json({ 
           ok: true, 
-          message: `Instância ${instanceKey} reiniciada com sucesso`,
+          message: `Instância ${instanceKey} desconectada com sucesso`,
           instance_key: instanceKey
         });
       } else {
         const errorText = await megaApiResponse.text();
-        console.log(`❌ Erro ao reiniciar na MegaAPI: ${megaApiResponse.status} - ${errorText}`);
+        console.log(`❌ Erro ao desconectar da MegaAPI: ${megaApiResponse.status} - ${errorText}`);
         return NextResponse.json({ 
           ok: false, 
-          error: `Erro ao reiniciar instância: ${errorText}` 
+          error: `Erro ao desconectar instância: ${errorText}` 
         }, { status: megaApiResponse.status });
       }
     } catch (megaApiError) {
@@ -93,7 +114,7 @@ export async function POST(req: Request) {
     }
 
   } catch (error) {
-    console.error('❌ Erro ao reiniciar instância:', error);
+    console.error('❌ Erro ao desconectar instância:', error);
     return NextResponse.json({ 
       ok: false, 
       error: error instanceof Error ? error.message : 'Erro desconhecido' 

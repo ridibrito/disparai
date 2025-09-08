@@ -25,12 +25,7 @@ export async function GET(req: Request) {
     
     // Procurar a instância específica na lista
     const targetInstance = listData.instances?.find((inst: any) => {
-      // Mapear nomes novos para nomes antigos
-      if (instanceKey === 'coruss-whatsapp-01') {
-        return inst.key === 'coruss_596274e5';
-      } else if (instanceKey === 'coruss-whatsapp-02') {
-        return inst.key === 'coruss_596274e5_575766';
-      }
+      // Usar o nome exato da instância
       return inst.key === instanceKey;
     });
 

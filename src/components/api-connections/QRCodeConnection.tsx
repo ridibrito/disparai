@@ -64,7 +64,7 @@ export default function QRCodeConnection({
   const checkConnectionStatus = async () => {
     setIsCheckingStatus(true);
     try {
-      const response = await fetch('/api/disparai/status', {
+      const response = await fetch('/api/disparai/check-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instanceKey, userId })
