@@ -1,13 +1,12 @@
-import { createServerClient } from '@/lib/supabaseServer';
-import { DisparosActions } from '@/components/dashboard/disparos-actions';
-import { CampaignsTable } from '@/components/dashboard/campaigns-table';
-import { DisparosPageWithRefresh } from '@/components/disparos/disparos-page-with-refresh';
+import { Suspense } from 'react';
+import DisparosPage from '@/components/disparos/DisparosPage';
 
-export const metadata = {
-  title: 'Disparos - disparai',
-  description: 'Gerencie seus disparos de mensagens',
-};
-
-export default async function DisparosPage() {
-  return <DisparosPageWithRefresh />;
+export default function Disparos() {
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <Suspense fallback={<div>Carregando...</div>}>
+        <DisparosPage />
+      </Suspense>
+    </div>
+  );
 }

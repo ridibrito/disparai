@@ -30,18 +30,14 @@ export function DisparosPageWithRefresh() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Buscar disparos do usuário
-      const { data: disparosRaw, error } = await supabase
-        .from('disparos')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Erro ao carregar disparos:', error);
+      // Buscar disparos do usuário via API
+      const response = await fetch('/api/campaigns');
+      if (!response.ok) {
+        console.error('Erro ao carregar disparos:', response.statusText);
         return;
       }
-
+      
+      const disparosRaw = await response.json();
       setDisparos((disparosRaw as Disparo[]) || []);
     } catch (error) {
       console.error('Erro ao carregar disparos:', error);

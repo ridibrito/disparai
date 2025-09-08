@@ -169,26 +169,32 @@ async function updateMessageStatus(updateData: any) {
     
     // Mapear status do WhatsApp para nosso sistema
     let mappedStatus = 'sent';
+    let updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+
     switch (status) {
       case 'delivered':
         mappedStatus = 'delivered';
+        updateData.delivered_at = new Date().toISOString();
         break;
       case 'read':
         mappedStatus = 'read';
+        updateData.read_at = new Date().toISOString();
         break;
       case 'failed':
         mappedStatus = 'failed';
+        updateData.error_message = 'Falha no envio via WhatsApp';
         break;
     }
+
+    updateData.status = mappedStatus;
 
     // Atualizar status na tabela campaign_messages
     const { error } = await supabase
       .from('campaign_messages')
-      .update({ 
-        status: mappedStatus,
-        updated_at: new Date().toISOString()
-      })
-      .eq('external_id', messageId);
+      .update(updateData)
+      .eq('whatsapp_message_id', messageId);
 
     if (error) {
       console.error('Erro ao atualizar status da mensagem:', error);

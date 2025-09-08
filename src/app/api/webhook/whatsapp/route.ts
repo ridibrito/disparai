@@ -1,5 +1,101 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
+
+// Cliente admin para operações que precisam de mais permissões
+const supabaseAdmin = createAdminClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+// Função para buscar ou criar contato
+async function findOrCreateContact(phoneNumber: string, userId: string) {
+  try {
+    // Limpar número de telefone (remover caracteres especiais)
+    const cleanPhone = phoneNumber.replace(/\D/g, '');
+    
+    // Buscar contato existente
+    const { data: existingContact } = await supabaseAdmin
+      .from('contacts')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('phone', cleanPhone)
+      .single();
+    
+    if (existingContact) {
+      console.log('📞 [WEBHOOK] Contato existente encontrado:', existingContact.name);
+      return existingContact;
+    }
+    
+    // Criar novo contato
+    console.log('👤 [WEBHOOK] Criando novo contato para:', cleanPhone);
+    const { data: newContact, error } = await supabaseAdmin
+      .from('contacts')
+      .insert({
+        user_id: userId,
+        name: `Contato ${cleanPhone.slice(-4)}`, // Nome temporário
+        phone: cleanPhone,
+        organization_id: userId // Usando userId como organization_id temporariamente
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('❌ [WEBHOOK] Erro ao criar contato:', error);
+      return null;
+    }
+    
+    console.log('✅ [WEBHOOK] Novo contato criado:', newContact.id);
+    return newContact;
+    
+  } catch (error) {
+    console.error('❌ [WEBHOOK] Erro na função findOrCreateContact:', error);
+    return null;
+  }
+}
+
+// Função para buscar ou criar conversa
+async function findOrCreateConversation(contactId: string, userId: string) {
+  try {
+    // Buscar conversa existente
+    const { data: existingConversation } = await supabaseAdmin
+      .from('conversations')
+      .select('*')
+      .eq('contact_id', contactId)
+      .eq('user_id', userId)
+      .single();
+    
+    if (existingConversation) {
+      console.log('💬 [WEBHOOK] Conversa existente encontrada:', existingConversation.id);
+      return existingConversation;
+    }
+    
+  // Criar nova conversa
+  console.log('🆕 [WEBHOOK] Criando nova conversa para contato:', contactId);
+  const { data: newConversation, error } = await supabaseAdmin
+    .from('conversations')
+    .insert({
+      contact_id: contactId,
+      user_id: userId,
+      organization_id: userId, // Usando userId como organization_id temporariamente
+      status: 'active'
+    })
+    .select()
+    .single();
+    
+    if (error) {
+      console.error('❌ [WEBHOOK] Erro ao criar conversa:', error);
+      return null;
+    }
+    
+    console.log('✅ [WEBHOOK] Nova conversa criada:', newConversation.id);
+    return newConversation;
+    
+  } catch (error) {
+    console.error('❌ [WEBHOOK] Erro na função findOrCreateConversation:', error);
+    return null;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,42 +106,80 @@ export async function POST(request: NextRequest) {
     
     // Verificar se é uma mensagem recebida
     if (body.type === 'message' && body.message) {
-      const { from, body: messageBody, type: messageType } = body.message;
+      const { from, body: messageBody, type: messageType, timestamp } = body.message;
       
       console.log(`📨 Mensagem recebida de ${from}: ${messageBody} (tipo: ${messageType})`);
       
-      // Aqui você pode processar a mensagem
-      // Por exemplo: salvar no banco, responder automaticamente, etc.
-      
-      // Exemplo: Salvar mensagem no banco de dados
-      const supabase = createClient();
-      
       // Buscar a conexão da instância
-      const { data: connection } = await supabase
+      console.log('🔍 [WEBHOOK] Buscando conexão para instância:', body.instance);
+      const { data: connection, error: connectionError } = await supabaseAdmin
         .from('api_connections')
         .select('*')
         .eq('type', 'whatsapp_disparai')
         .eq('instance_id', body.instance || 'disparai')
         .single();
       
+      if (connectionError) {
+        console.log('❌ [WEBHOOK] Erro ao buscar conexão:', connectionError);
+        return NextResponse.json({ 
+          error: 'Conexão não encontrada',
+          details: connectionError.message 
+        }, { status: 404 });
+      }
+      
+      if (!connection) {
+        console.log('❌ [WEBHOOK] Nenhuma conexão encontrada para instância:', body.instance);
+        return NextResponse.json({ 
+          error: 'Conexão não encontrada' 
+        }, { status: 404 });
+      }
+      
       if (connection) {
-        // Salvar mensagem recebida
-        const { error } = await supabase
-          .from('messages')
-          .insert({
-            connection_id: connection.id,
-            from_number: from,
-            message_body: messageBody,
-            message_type: messageType,
-            direction: 'inbound',
-            status: 'received',
-            created_at: new Date().toISOString()
-          });
+        console.log('🔍 [WEBHOOK] Processando mensagem para usuário:', connection.user_id);
         
-        if (error) {
-          console.error('❌ Erro ao salvar mensagem:', error);
+        // Buscar ou criar contato
+        console.log('🔍 [WEBHOOK] Buscando/criando contato para:', from);
+        let contact = await findOrCreateContact(from, connection.user_id);
+        
+        if (contact) {
+          console.log('✅ [WEBHOOK] Contato encontrado/criado:', contact.id, contact.name);
+          
+          // Buscar ou criar conversa
+          console.log('🔍 [WEBHOOK] Buscando/criando conversa para contato:', contact.id);
+          let conversation = await findOrCreateConversation(contact.id, connection.user_id);
+          
+          if (conversation) {
+            console.log('✅ [WEBHOOK] Conversa encontrada/criada:', conversation.id);
+            
+            // Salvar mensagem na conversa
+            const { data: savedMessage, error: messageError } = await supabaseAdmin
+              .from('messages')
+              .insert({
+                conversation_id: conversation.id,
+                sender: 'contact',
+                content: messageBody,
+                organization_id: connection.user_id,
+                created_at: timestamp ? new Date(timestamp * 1000).toISOString() : new Date().toISOString()
+              })
+              .select()
+              .single();
+            
+            if (messageError) {
+              console.error('❌ [WEBHOOK] Erro ao salvar mensagem:', messageError);
+            } else {
+              console.log('✅ [WEBHOOK] Mensagem salva:', savedMessage.id);
+              
+              // Atualizar updated_at da conversa
+              await supabaseAdmin
+                .from('conversations')
+                .update({ updated_at: new Date().toISOString() })
+                .eq('id', conversation.id);
+            }
+          } else {
+            console.log('❌ [WEBHOOK] Erro ao criar/buscar conversa para contato:', contact.id);
+          }
         } else {
-          console.log('✅ Mensagem salva no banco de dados');
+          console.log('❌ [WEBHOOK] Erro ao criar/buscar contato para:', from);
         }
       }
     }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { 
   MoreHorizontal, 
   Play, 
@@ -32,6 +33,7 @@ interface DisparoActionsProps {
 export function DisparoActions({ disparo, onStatusChange }: DisparoActionsProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Fechar menu quando clicar fora
@@ -139,14 +141,10 @@ export function DisparoActions({ disparo, onStatusChange }: DisparoActionsProps)
   };
 
   const handleDeleteDisparo = async () => {
-    if (!confirm('Tem certeza que deseja excluir este disparo?')) {
-      return;
-    }
-
     setIsLoading(true);
     
     try {
-      const response = await fetch(`/api/disparos/${disparo.id}`, {
+      const response = await fetch(`/api/campaigns/${disparo.id}`, {
         method: 'DELETE',
       });
 
@@ -230,7 +228,7 @@ export function DisparoActions({ disparo, onStatusChange }: DisparoActionsProps)
                 <button
                   onClick={() => {
                     setShowMenu(false);
-                    handleDeleteDisparo();
+                    setShowDeleteDialog(true);
                   }}
                   className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                 >
@@ -242,6 +240,18 @@ export function DisparoActions({ disparo, onStatusChange }: DisparoActionsProps)
           </div>
         )}
       </div>
+      
+      <ConfirmationDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title="Excluir disparo"
+        description={`Tem certeza que deseja excluir o disparo "${disparo.name}"? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        variant="destructive"
+        onConfirm={handleDeleteDisparo}
+        isLoading={isLoading}
+      />
     </div>
   );
 }

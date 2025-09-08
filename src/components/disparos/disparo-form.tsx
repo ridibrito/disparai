@@ -221,6 +221,31 @@ export function DisparoForm({ userId, initialData, isEditing = false }: DisparoF
         return;
       }
       
+      // Buscar contatos das listas selecionadas
+      let targetContacts = [];
+      if ((values.target_lists || []).length > 0) {
+        const { data: contactsData, error: contactsError } = await supabase
+          .from('contact_list_members')
+          .select(`
+            contact_id,
+            contacts!inner(id, name, phone)
+          `)
+          .in('list_id', values.target_lists as string[]);
+
+        if (contactsError) {
+          console.error('Erro ao buscar contatos das listas:', contactsError);
+          toast.error('Erro ao buscar contatos das listas selecionadas');
+          setIsLoading(false);
+          return;
+        }
+
+        targetContacts = (contactsData || []).map(item => ({
+          id: item.contacts.id,
+          name: item.contacts.name,
+          phone: item.contacts.phone
+        }));
+      }
+
       // Preparar dados do disparo
       const disparoData = {
         user_id: userId,
@@ -231,6 +256,7 @@ export function DisparoForm({ userId, initialData, isEditing = false }: DisparoF
             ? values.api_credential_id
             : null,
         target_lists: values.target_lists || [],
+        target_contacts: targetContacts,
         status: values.schedule ? 'scheduled' : 'draft',
         scheduled_at: values.schedule ? new Date(values.scheduled_at || '').toISOString() : null,
       };
@@ -238,27 +264,40 @@ export function DisparoForm({ userId, initialData, isEditing = false }: DisparoF
       let disparoId;
       
       if (isEditing && initialData?.id) {
-        // Atualizar disparo existente
-        const { data, error } = await supabase
-          .from('disparos')
-          .update(disparoData)
-          .eq('id', initialData.id)
-          .select()
-          .single();
-        
-        if (error) throw error;
-        disparoId = data.id;
+        // Atualizar disparo existente via API
+        const response = await fetch(`/api/campaigns/${initialData.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(disparoData),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Erro ao atualizar disparo');
+        }
+
+        const result = await response.json();
+        disparoId = result.id;
         toast.success('Disparo atualizado com sucesso!');
       } else {
-        // Criar novo disparo
-        const { data, error } = await supabase
-          .from('disparos')
-          .insert(disparoData)
-          .select()
-          .single();
-        
-        if (error) throw error;
-        disparoId = data.id;
+        // Criar novo disparo via API
+        const response = await fetch('/api/campaigns', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(disparoData),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Erro ao criar disparo');
+        }
+
+        const result = await response.json();
+        disparoId = result.id;
         toast.success('Disparo criado com sucesso!');
       }
       
@@ -273,14 +312,14 @@ export function DisparoForm({ userId, initialData, isEditing = false }: DisparoF
           if (targetContactsError) throw targetContactsError;
 
           const messagesToInsert = (targetContacts || []).map((c) => ({
-            disparo_id: disparoId,
+            campaign_id: disparoId,
             contact_id: c.contact_id,
             status: 'pending' as const,
           }));
 
           if (messagesToInsert.length > 0) {
             const { error: insertMessagesError } = await supabase
-              .from('disparo_messages')
+              .from('campaign_messages')
               .insert(messagesToInsert);
 
             if (insertMessagesError) throw insertMessagesError;

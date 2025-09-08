@@ -319,6 +319,63 @@ export class DisparaiAPIClient {
       };
     }
   }
+
+  /**
+   * Buscar chats/conversas da instância
+   */
+  async getChats(): Promise<DisparaiAPIResponse> {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/rest/chat/${this.config.instanceKey}`,
+        { headers: this.getHeaders() }
+      );
+      return response.data;
+    } catch (error: any) {
+      return {
+        error: true,
+        message: error.response?.data?.message || error.message,
+        data: error.response?.data
+      };
+    }
+  }
+
+  /**
+   * Buscar mensagens de um chat específico
+   */
+  async getMessages(chatId: string): Promise<DisparaiAPIResponse> {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/rest/chat/${this.config.instanceKey}/messages/${chatId}`,
+        { headers: this.getHeaders() }
+      );
+      return response.data;
+    } catch (error: any) {
+      return {
+        error: true,
+        message: error.response?.data?.message || error.message,
+        data: error.response?.data
+      };
+    }
+  }
+
+  /**
+   * Buscar contatos da instância
+   */
+  async getContacts(): Promise<DisparaiAPIResponse> {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/rest/contacts/${this.config.instanceKey}`,
+        { headers: this.getHeaders() }
+      );
+      return response.data;
+    } catch (error: any) {
+      return {
+        error: true,
+        message: error.response?.data?.message || error.message,
+        data: error.response?.data
+      };
+    }
+  }
 }
 
 /**
