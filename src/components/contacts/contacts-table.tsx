@@ -94,6 +94,7 @@ export function ContactsTable({ initialContacts, userId }: ContactsTableProps) {
   const [isMoving, setIsMoving] = useState(false);
   const [pageContactLists, setPageContactLists] = useState<Record<string, string[]>>({});
   const [isMerging, setIsMerging] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Estados para duplicados
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
@@ -293,6 +294,47 @@ export function ContactsTable({ initialContacts, userId }: ContactsTableProps) {
       setIsMerging(false);
     }
   }
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) {
+      toast.error('Selecione pelo menos um contato para excluir.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Tem certeza que deseja excluir ${selectedIds.length} contato(s) selecionado(s)?\n\nEsta ação não pode ser desfeita.`
+    );
+
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      // Primeiro, remover das listas de contatos
+      const { error: listError } = await supabase
+        .from('contact_list_members')
+        .delete()
+        .in('contact_id', selectedIds);
+      
+      if (listError) throw listError;
+
+      // Depois, excluir os contatos
+      const { error: deleteError } = await supabase
+        .from('contacts')
+        .delete()
+        .in('id', selectedIds);
+      
+      if (deleteError) throw deleteError;
+
+      toast.success(`${selectedIds.length} contato(s) excluído(s) com sucesso.`);
+      clearSelection();
+      router.refresh();
+    } catch (err: any) {
+      console.error('Erro ao excluir contatos:', err);
+      toast.error(err.message || 'Erro ao excluir contatos');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Carregar listas por contato (apenas para a página atual)
   useEffect(() => {
@@ -502,6 +544,14 @@ export function ContactsTable({ initialContacts, userId }: ContactsTableProps) {
               </Button>
               <Button onClick={handleMergeSelected} disabled={!canMergeSelected || isMerging}>
                 {isMerging ? 'Mesclando...' : 'Mesclar selecionados'}
+              </Button>
+              <Button 
+                onClick={handleBulkDelete} 
+                disabled={isDeleting}
+                variant="destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                {isDeleting ? 'Excluindo...' : 'Excluir selecionados'}
               </Button>
             </div>
           </div>

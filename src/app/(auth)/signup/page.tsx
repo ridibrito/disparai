@@ -1,4 +1,4 @@
-import RegisterForm from '@/components/auth/RegisterForm';
+import { SignupForm } from '@/components/auth/signup-form';
 
 export const metadata = {
   title: 'Cadastro - disparai',
@@ -6,5 +6,5 @@ export const metadata = {
 };
 
 export default function SignupPage() {
-  return <RegisterForm />;
+  return <SignupForm />;
 }

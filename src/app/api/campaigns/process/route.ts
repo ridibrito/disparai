@@ -58,6 +58,37 @@ export async function POST(req: NextRequest) {
       .update({ status: 'sending', started_at: new Date().toISOString() })
       .eq('id', campaignId);
 
+    // Iniciar processamento assíncrono
+    processCampaignAsync(campaignId, campaign, pendingMessages);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Campanha iniciada com sucesso',
+      data: {
+        campaignId,
+        totalMessages: pendingMessages.length,
+        status: 'processing'
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Erro ao processar campanha:', error);
+    return NextResponse.json(
+      { error: 'Erro interno do servidor', details: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// Função assíncrona para processar a campanha
+async function processCampaignAsync(
+  campaignId: string,
+  campaign: any,
+  pendingMessages: any[]
+) {
+  const supabase = await createServerClient();
+  
+  try {
     // Inicializar cliente da API Disparai
     const disparaiClient = new DisparaiAPIClient({
       instanceKey: campaign.api_connections.instance_id,
@@ -88,8 +119,18 @@ export async function POST(req: NextRequest) {
       messages: messagesToSend,
       batchSize: 10,
       delayBetweenBatches: 1000,
-      onProgress: (sent, total) => {
-        console.log(`Progresso: ${sent}/${total} mensagens processadas`);
+      onProgress: async (sent, total) => {
+        console.log(`Campanha ${campaignId}: ${sent}/${total} mensagens processadas`);
+        
+        // Atualizar progresso no banco (opcional)
+        await supabase
+          .from('campaigns')
+          .update({ 
+            metadata: { 
+              progress: { sent, total, percentage: Math.round((sent / total) * 100) }
+            }
+          })
+          .eq('id', campaignId);
       }
     });
 
@@ -116,40 +157,39 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const successCount = sendResult.summary.sent;
-    const errorCount = sendResult.summary.failed;
-    const errors = sendResult.results
-      .filter(r => !r.success)
-      .map(r => r.error)
-      .slice(0, 5); // Apenas os primeiros 5 erros
-
     // Atualizar status final da campanha
-    const finalStatus = errorCount === 0 ? 'sent' : (successCount > 0 ? 'partial' : 'failed');
+    const finalStatus = sendResult.summary.failed === 0 ? 'sent' : 
+                       (sendResult.summary.sent > 0 ? 'partial' : 'failed');
+    
     await supabase
       .from('campaigns')
       .update({ 
         status: finalStatus,
-        completed_at: new Date().toISOString()
+        completed_at: new Date().toISOString(),
+        metadata: {
+          summary: {
+            total: sendResult.summary.total,
+            sent: sendResult.summary.sent,
+            failed: sendResult.summary.failed,
+            percentage: Math.round((sendResult.summary.sent / sendResult.summary.total) * 100)
+          }
+        }
       })
       .eq('id', campaignId);
 
-    return NextResponse.json({
-      success: true,
-      message: 'Campanha processada com sucesso',
-      data: {
-        campaignId,
-        totalMessages: pendingMessages.length,
-        successCount,
-        errorCount,
-        errors: errors.slice(0, 5) // Retornar apenas os primeiros 5 erros
-      }
-    });
+    console.log(`Campanha ${campaignId} processada: ${sendResult.summary.sent}/${sendResult.summary.total} enviadas`);
 
   } catch (error: any) {
-    console.error('Erro ao enviar campanha:', error);
-    return NextResponse.json(
-      { error: 'Erro interno do servidor', details: error.message },
-      { status: 500 }
-    );
+    console.error(`Erro ao processar campanha ${campaignId}:`, error);
+    
+    // Marcar campanha como falhou
+    await supabase
+      .from('campaigns')
+      .update({ 
+        status: 'failed',
+        completed_at: new Date().toISOString(),
+        metadata: { error: error.message }
+      })
+      .eq('id', campaignId);
   }
 }

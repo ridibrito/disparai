@@ -8,7 +8,7 @@ ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE public.contacts 
 ADD COLUMN IF NOT EXISTS "group" TEXT;
 
-ALTER TABLE public.contacts 
+ALTER TABLE public.contacts odando na porta 3000
 ADD COLUMN IF NOT EXISTS notes TEXT;
 
 -- Adicionar campo organization_id se não existir

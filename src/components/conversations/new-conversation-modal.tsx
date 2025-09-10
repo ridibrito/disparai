@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, User, Phone } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { Search, Phone } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Contact {
   id: string;

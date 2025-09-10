@@ -27,7 +27,7 @@ export class DisparaiAPIClient {
 
   constructor(config: DisparaiAPIConfig) {
     this.config = config;
-    this.baseUrl = config.baseUrl || 'https://teste8.megaapi.com.br';
+    this.baseUrl = config.baseUrl || 'https://api.disparai.com';
   }
 
   private getHeaders() {
@@ -310,6 +310,168 @@ export class DisparaiAPIClient {
           messageId: response.data?.messageId || response.data?.id,
           status: response.data?.status || 'sent'
         }
+      };
+    } catch (error: any) {
+      return {
+        error: true,
+        message: error.response?.data?.message || error.message,
+        data: error.response?.data
+      };
+    }
+  }
+
+  /**
+   * Enviar mensagens em lote com controle de taxa
+   */
+  async sendBulkMessages(params: {
+    instanceKey: string;
+    messages: Array<{
+      phoneNumber: string;
+      message: string;
+      contactId?: string;
+    }>;
+    batchSize?: number;
+    delayBetweenBatches?: number;
+    onProgress?: (sent: number, total: number) => void;
+  }): Promise<{
+    success: boolean;
+    results: Array<{
+      contactId?: string;
+      phoneNumber: string;
+      success: boolean;
+      messageId?: string;
+      error?: string;
+    }>;
+    summary: {
+      total: number;
+      sent: number;
+      failed: number;
+    };
+  }> {
+    const {
+      instanceKey,
+      messages,
+      batchSize = 10,
+      delayBetweenBatches = 1000,
+      onProgress
+    } = params;
+
+    const results: Array<{
+      contactId?: string;
+      phoneNumber: string;
+      success: boolean;
+      messageId?: string;
+      error?: string;
+    }> = [];
+
+    let sent = 0;
+    let failed = 0;
+
+    // Processar mensagens em lotes
+    for (let i = 0; i < messages.length; i += batchSize) {
+      const batch = messages.slice(i, i + batchSize);
+      
+      // Processar lote em paralelo
+      const batchPromises = batch.map(async (message) => {
+        try {
+          const result = await this.sendSimpleMessage({
+            instanceKey,
+            phoneNumber: message.phoneNumber,
+            message: message.message
+          });
+
+          if (result.error) {
+            failed++;
+            return {
+              contactId: message.contactId,
+              phoneNumber: message.phoneNumber,
+              success: false,
+              error: result.message
+            };
+          } else {
+            sent++;
+            return {
+              contactId: message.contactId,
+              phoneNumber: message.phoneNumber,
+              success: true,
+              messageId: result.data?.messageId
+            };
+          }
+        } catch (error: any) {
+          failed++;
+          return {
+            contactId: message.contactId,
+            phoneNumber: message.phoneNumber,
+            success: false,
+            error: error.message
+          };
+        }
+      });
+
+      // Aguardar o lote atual
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
+
+      // Notificar progresso
+      if (onProgress) {
+        onProgress(sent + failed, messages.length);
+      }
+
+      // Pausa entre lotes para não sobrecarregar a API
+      if (i + batchSize < messages.length) {
+        await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
+      }
+    }
+
+    return {
+      success: failed === 0,
+      results,
+      summary: {
+        total: messages.length,
+        sent,
+        failed
+      }
+    };
+  }
+
+  /**
+   * Verificar status de uma mensagem específica
+   */
+  async getMessageStatus(instanceKey: string, messageId: string): Promise<DisparaiAPIResponse> {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/rest/message/${instanceKey}/${messageId}`,
+        { headers: this.getHeaders() }
+      );
+      
+      return {
+        error: false,
+        message: 'Status obtido com sucesso',
+        data: response.data
+      };
+    } catch (error: any) {
+      return {
+        error: true,
+        message: error.response?.data?.message || error.message,
+        data: error.response?.data
+      };
+    }
+  }
+
+  /**
+   * Obter estatísticas de envio da instância
+   */
+  async getInstanceStats(instanceKey: string): Promise<DisparaiAPIResponse> {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/rest/instance/${instanceKey}/stats`,
+        { headers: this.getHeaders() }
+      );
+      
+      return {
+        error: false,
+        message: 'Estatísticas obtidas com sucesso',
+        data: response.data
       };
     } catch (error: any) {
       return {

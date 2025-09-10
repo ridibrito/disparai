@@ -2,11 +2,10 @@
 
 import { useState } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
+import Link from 'next/link';
+import PasswordInput from '@/components/ui/password-input';
 
 export function SignupForm() {
   const supabase = createClientComponentClient();
@@ -25,6 +24,7 @@ export function SignupForm() {
       [e.target.name]: e.target.value
     });
   };
+
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,12 +73,12 @@ export function SignupForm() {
 
         if (userError) throw userError;
 
-        // 3. Criar organização
+        // 3. Criar organização básica
         const { data: orgData, error: orgError } = await supabase
           .from('organizations')
           .insert({
-            name: `${formData.companyName} - ${formData.ownerName}`,
-            slug: `${formData.companyName.toLowerCase().replace(/\s+/g, '-')}-org`,
+            name: formData.companyName,
+            slug: formData.companyName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
             company_name: formData.companyName,
             owner_name: formData.ownerName,
             owner_email: formData.email
@@ -132,127 +132,189 @@ export function SignupForm() {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto">
-      <div className="bg-white rounded-lg shadow-lg p-8">
-        {/* Logo da empresa */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-            <span className="text-white text-2xl font-bold">C</span>
+    <div className="min-h-screen bg-white flex w-full">
+      {/* Lado Esquerdo - Formulário */}
+      <div className="flex items-center justify-center p-12" style={{ width: '30%', minWidth: '400px' }}>
+        <div className="w-full max-w-md space-y-8">
+          {/* Header with Logo */}
+          <div className="text-center">
+            <div className="flex justify-center mb-6">
+              <Image
+                src="/logo.png"
+                alt="disparai Logo"
+                width={150}
+                height={45}
+                className="h-10 w-auto"
+                priority
+              />
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-3">Criar sua conta</h1>
+            <p className="text-lg text-gray-600">Configure sua empresa no disparai</p>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900">Criar Conta</h2>
-          <p className="text-gray-600 mt-2">Configure sua empresa no disparai</p>
+
+          {/* Form */}
+          <form onSubmit={handleSignUp} className="space-y-6 bg-white p-8 rounded-lg shadow-sm border border-gray-100">
+            {/* Nome da Empresa */}
+            <div className="space-y-2">
+              <label htmlFor="companyName" className="block text-sm font-medium text-gray-700">
+                Nome da Empresa
+              </label>
+              <input
+                id="companyName"
+                name="companyName"
+                type="text"
+                value={formData.companyName}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:border-gray-400 transition-colors"
+                style={{ '--tw-ring-color': '#4bca59' } as any}
+                placeholder="Ex: Minha Empresa Ltda"
+                disabled={loading}
+                required
+              />
+            </div>
+
+            {/* Nome do Proprietário */}
+            <div className="space-y-2">
+              <label htmlFor="ownerName" className="block text-sm font-medium text-gray-700">
+                Nome do Proprietário
+              </label>
+              <input
+                id="ownerName"
+                name="ownerName"
+                type="text"
+                value={formData.ownerName}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:border-gray-400 transition-colors"
+                style={{ '--tw-ring-color': '#4bca59' } as any}
+                placeholder="Ex: João Silva"
+                disabled={loading}
+                required
+              />
+            </div>
+
+            {/* Email */}
+            <div className="space-y-2">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                Email
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:border-gray-400 transition-colors"
+                style={{ '--tw-ring-color': '#4bca59' } as any}
+                placeholder="seu@email.com"
+                disabled={loading}
+                required
+              />
+            </div>
+
+            {/* Senha */}
+            <div className="space-y-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                Senha
+              </label>
+              <PasswordInput
+                id="password"
+                name="password"
+                value={formData.password}
+                onChange={handleInputChange}
+                placeholder="••••••••"
+                disabled={loading}
+                style={{ '--tw-ring-color': '#4bca59' } as any}
+                autoComplete="new-password"
+              />
+            </div>
+
+            {/* Confirmar Senha */}
+            <div className="space-y-2">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                Confirmar Senha
+              </label>
+              <PasswordInput
+                id="confirmPassword"
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleInputChange}
+                placeholder="••••••••"
+                disabled={loading}
+                style={{ '--tw-ring-color': '#4bca59' } as any}
+                autoComplete="new-password"
+              />
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 px-4 text-white font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              style={{ 
+                backgroundColor: '#4bca59',
+                '--tw-ring-color': '#4bca59'
+              } as any}
+            >
+              {loading ? 'Criando conta...' : 'Criar Conta'}
+            </button>
+
+            {/* Login Link */}
+            <div className="text-center pt-4 border-t border-gray-200">
+              <p className="text-sm text-gray-600">
+                Já tem uma conta?{' '}
+                <Link 
+                  href="/login" 
+                  className="hover:underline font-medium transition-colors"
+                  style={{ color: '#4bca59' }}
+                >
+                  Faça login
+                </Link>
+              </p>
+            </div>
+          </form>
         </div>
+      </div>
 
-        <form onSubmit={handleSignUp} className="space-y-6">
-          {/* Nome da Empresa */}
-          <div>
-            <Label htmlFor="companyName" className="text-sm font-medium text-gray-700">
-              Nome da Empresa *
-            </Label>
-            <Input
-              id="companyName"
-              name="companyName"
-              type="text"
-              value={formData.companyName}
-              onChange={handleInputChange}
-              placeholder="Ex: Coruss, Minha Empresa Ltda"
-              className="mt-1"
-              required
-            />
-          </div>
-
-          {/* Nome do Proprietário */}
-          <div>
-            <Label htmlFor="ownerName" className="text-sm font-medium text-gray-700">
-              Nome do Proprietário *
-            </Label>
-            <Input
-              id="ownerName"
-              name="ownerName"
-              type="text"
-              value={formData.ownerName}
-              onChange={handleInputChange}
-              placeholder="Ex: Ricardo de brito Albuquerque"
-              className="mt-1"
-              required
-            />
-          </div>
-
-          {/* Email */}
-          <div>
-            <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-              Email *
-            </Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              placeholder="ricardo@coruss.com"
-              className="mt-1"
-              required
-            />
-          </div>
-
-          {/* Senha */}
-          <div>
-            <Label htmlFor="password" className="text-sm font-medium text-gray-700">
-              Senha *
-            </Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              value={formData.password}
-              onChange={handleInputChange}
-              placeholder="Mínimo 6 caracteres"
-              className="mt-1"
-              minLength={6}
-              required
-            />
-          </div>
-
-          {/* Confirmar Senha */}
-          <div>
-            <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">
-              Confirmar Senha *
-            </Label>
-            <Input
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              value={formData.confirmPassword}
-              onChange={handleInputChange}
-              placeholder="Digite a senha novamente"
-              className="mt-1"
-              required
-            />
-          </div>
-
-          {/* Botão de Cadastro */}
-          <Button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-105"
-          >
-            {loading ? (
-              <div className="flex items-center justify-center">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                Criando conta...
+      {/* Lado Direito - Visual Chamativo */}
+      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-[#4bca59] to-[#2da643] relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='30' cy='30' r='4'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          }} />
+        </div>
+        
+        {/* Content */}
+        <div className="relative z-10 flex flex-col items-center justify-center text-center text-white p-12">
+          <div className="max-w-md">
+            <h2 className="text-4xl font-bold mb-6">
+              Comece sua jornada de <span className="text-green-200">vendas</span>
+            </h2>
+            <p className="text-xl text-green-100 mb-8">
+              Crie sua conta e comece a transformar conversas em resultados. Configure sua empresa e equipe em minutos.
+            </p>
+            
+            {/* Features */}
+            <div className="space-y-4 text-left">
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 bg-green-200 rounded-full"></div>
+                <span className="text-green-100">Configuração rápida e fácil</span>
               </div>
-            ) : (
-              'Criar Conta da Empresa'
-            )}
-          </Button>
-
-          {/* Informações adicionais */}
-          <div className="text-center text-sm text-gray-500">
-            <p>✅ Criação automática da organização</p>
-            <p>👑 Você será o Owner da empresa</p>
-            <p>🔐 Conta segura com autenticação</p>
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 bg-green-200 rounded-full"></div>
+                <span className="text-green-100">Organização criada automaticamente</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 bg-green-200 rounded-full"></div>
+                <span className="text-green-100">Acesso imediato a todas as funcionalidades</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 bg-green-200 rounded-full"></div>
+                <span className="text-green-100">Suporte completo da nossa equipe</span>
+              </div>
+            </div>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

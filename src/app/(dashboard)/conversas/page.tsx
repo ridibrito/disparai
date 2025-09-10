@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabaseServer';
-import { ConversationsPageWithUser } from '@/components/conversations/conversations-page-with-user';
+import ConversationsPageReal from '@/components/conversations/conversations-page-real';
 
 export const metadata = {
   title: 'Conversas - disparai',
@@ -7,5 +7,5 @@ export const metadata = {
 };
 
 export default async function ConversasPage() {
-  return <ConversationsPageWithUser />;
+  return <ConversationsPageReal />;
 }

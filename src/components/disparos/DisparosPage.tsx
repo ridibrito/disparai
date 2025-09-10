@@ -17,12 +17,14 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  Zap
+  Zap,
+  TrendingUp
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
 import CreateDisparoModal from './CreateDisparoModal';
 import DisparoDetailsModal from './DisparoDetailsModal';
+import { RealtimeStatsModal } from './RealtimeStatsModal';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 
 interface Disparo {
@@ -54,6 +56,8 @@ export default function DisparosPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [disparoToDelete, setDisparoToDelete] = useState<Disparo | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showRealtimeStats, setShowRealtimeStats] = useState(false);
+  const [selectedDisparoForStats, setSelectedDisparoForStats] = useState<Disparo | null>(null);
 
   // Carregar disparos
   const loadDisparos = async () => {
@@ -167,6 +171,24 @@ export default function DisparosPage() {
       </Button>
     );
 
+    // Mostrar estatísticas em tempo real para campanhas ativas
+    if (disparo.status === 'in_progress' || disparo.status === 'sending') {
+      actions.push(
+        <Button
+          key="stats"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setSelectedDisparoForStats(disparo);
+            setShowRealtimeStats(true);
+          }}
+        >
+          <TrendingUp className="w-4 h-4 mr-2" />
+          Stats
+        </Button>
+      );
+    }
+
     // Ações baseadas no status
     switch (disparo.status) {
       case 'draft':
@@ -231,14 +253,21 @@ export default function DisparosPage() {
   // Função para iniciar disparo
   const startDisparo = async (id: string) => {
     try {
-      const response = await fetch(`/api/campaigns/${id}/start`, {
-        method: 'POST'
+      const response = await fetch(`/api/campaigns/process`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ campaignId: id })
       });
       const data = await response.json();
 
       if (data.success) {
-        toast.success('Disparo iniciado com sucesso!');
+        toast.success('Disparo iniciado com sucesso! O processamento está em andamento.');
         loadDisparos();
+        
+        // Iniciar polling para atualizações em tempo real
+        startRealtimeUpdates(id);
       } else {
         toast.error(data.error || 'Erro ao iniciar disparo');
       }
@@ -246,6 +275,47 @@ export default function DisparosPage() {
       console.error('Erro ao iniciar disparo:', error);
       toast.error('Erro ao iniciar disparo');
     }
+  };
+
+  // Função para iniciar atualizações em tempo real
+  const startRealtimeUpdates = (campaignId: string) => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/campaigns/${campaignId}/realtime-stats`);
+        const data = await response.json();
+        
+        if (data.success) {
+          // Atualizar estatísticas em tempo real
+          setDisparos(prevDisparos => 
+            prevDisparos.map(disparo => 
+              disparo.id === campaignId 
+                ? { 
+                    ...disparo, 
+                    statistics: data.data.statistics,
+                    status: data.data.campaign.status
+                  }
+                : disparo
+            )
+          );
+
+          // Parar polling se a campanha foi concluída
+          if (data.data.campaign.status === 'sent' || 
+              data.data.campaign.status === 'failed' || 
+              data.data.campaign.status === 'cancelled') {
+            clearInterval(interval);
+            toast.success('Disparo concluído!');
+            loadDisparos(); // Recarregar dados finais
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao buscar estatísticas em tempo real:', error);
+      }
+    }, 5000); // Atualizar a cada 5 segundos
+
+    // Limpar interval após 30 minutos (timeout de segurança)
+    setTimeout(() => {
+      clearInterval(interval);
+    }, 30 * 60 * 1000);
   };
 
   // Função para pausar disparo
@@ -392,6 +462,26 @@ export default function DisparosPage() {
                     </div>
                   </div>
 
+                  {/* Barra de progresso para campanhas em andamento */}
+                  {disparo.status === 'in_progress' && (
+                    <div className="mt-4">
+                      <div className="flex justify-between text-xs text-gray-600 mb-1">
+                        <span>Progresso</span>
+                        <span>
+                          {Math.round(((disparo.statistics.sent + disparo.statistics.delivered + disparo.statistics.read + disparo.statistics.failed) / disparo.statistics.total_recipients) * 100)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                          style={{
+                            width: `${Math.round(((disparo.statistics.sent + disparo.statistics.delivered + disparo.statistics.read + disparo.statistics.failed) / disparo.statistics.total_recipients) * 100)}%`
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Ações */}
                   <div className="flex items-center gap-2 pt-2 border-t">
                     {getActions(disparo)}
@@ -454,6 +544,19 @@ export default function DisparosPage() {
         onConfirm={deleteDisparo}
         isLoading={isDeleting}
       />
+
+      {/* Modal de estatísticas em tempo real */}
+      {showRealtimeStats && selectedDisparoForStats && (
+        <RealtimeStatsModal
+          isOpen={showRealtimeStats}
+          onClose={() => {
+            setShowRealtimeStats(false);
+            setSelectedDisparoForStats(null);
+          }}
+          campaignId={selectedDisparoForStats.id}
+          campaignName={selectedDisparoForStats.name}
+        />
+      )}
     </div>
   );
 }

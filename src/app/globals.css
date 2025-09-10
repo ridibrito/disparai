@@ -151,7 +151,7 @@ html.sidebar-collapsed {
   margin-bottom: -2rem;
   height: calc(100vh - 5rem);
   display: flex;
-  flex-direction: column;
+  flex-direction: row; /* Mudado para row para sidebar + chat lado a lado */
   overflow: hidden; /* previne scroll externo */
 }
 
