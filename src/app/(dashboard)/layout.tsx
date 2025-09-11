@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import Image from 'next/image';
 import { createServerClient } from '@/lib/supabaseServer';
-import { Settings, Home, Users, MessageSquare, Zap } from 'lucide-react';
+import { Settings, Home, Users, MessageSquare, Zap, FileText } from 'lucide-react';
 import { SidebarToggle } from '@/components/dashboard/sidebar-toggle';
 import { UserDropdown } from '@/components/ui/user-dropdown';
 import { SidebarLink } from '@/components/dashboard/sidebar-link';

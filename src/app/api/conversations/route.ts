@@ -1,211 +1,150 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabaseServer';
-import { createClient } from "@supabase/supabase-js";
 
-// Cliente admin para operações que precisam de mais permissões
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-// GET - Listar conversas do usuário
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
+    
+    // Verificar autenticação
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    // Buscar conversas com informações do contato e última mensagem
-    const { data: conversations, error } = await supabaseAdmin
+    // Buscar organization_id do usuário
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+
+    if (userError || !userData) {
+      return NextResponse.json({ error: 'Erro ao buscar dados do usuário' }, { status: 500 });
+    }
+
+    // Buscar conversas com informações do contato
+    const { data: conversations, error: conversationsError } = await supabase
       .from('conversations')
       .select(`
-        id,
-        contact_id,
-        user_id,
-        status,
-        created_at,
-        updated_at,
+        *,
         contacts!inner(
           id,
           name,
-          phone
-        ),
-        messages(
-          id,
-          content,
-          sender,
+          phone,
           created_at
         )
       `)
       .eq('user_id', user.id)
+      .eq('contacts.organization_id', userData.organization_id)
       .order('updated_at', { ascending: false });
 
-    if (error) {
-      console.error('Erro ao buscar conversas:', error);
-      return NextResponse.json({ 
-        error: 'Erro ao buscar conversas' 
-      }, { status: 500 });
+    if (conversationsError) {
+      console.error('Erro ao buscar conversas:', conversationsError);
+      return NextResponse.json({ error: 'Erro ao buscar conversas' }, { status: 500 });
     }
 
-    // Processar conversas para incluir última mensagem
-    const processedConversations = conversations?.map((conv: any) => {
-      const lastMessage = conv.messages?.sort((a: any, b: any) => 
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      )[0];
+    // Buscar última mensagem de cada conversa
+    const conversationsWithLastMessage = await Promise.all(
+      conversations.map(async (conversation) => {
+        const { data: lastMessage } = await supabase
+          .from('messages')
+          .select('content, created_at, sender, status')
+          .eq('conversation_id', conversation.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
 
-      return {
-        id: conv.id,
-        contact_id: conv.contact_id,
-        user_id: conv.user_id,
-        status: conv.status,
-        created_at: conv.created_at,
-        updated_at: conv.updated_at,
-        contacts: conv.contacts,
-        last_message_content: lastMessage?.content || '',
-        last_message_created_at: lastMessage?.created_at || '',
-        last_message_sender: lastMessage?.sender || null
-      };
-    }) || [];
+        return {
+          ...conversation,
+          contact: conversation.contacts,
+          last_message: lastMessage || null,
+        };
+      })
+    );
 
-    return NextResponse.json({
-      success: true,
-      conversations: processedConversations
-    });
-
-  } catch (error: any) {
+    return NextResponse.json({ conversations: conversationsWithLastMessage });
+  } catch (error) {
     console.error('Erro na API de conversas:', error);
-    return NextResponse.json({ 
-      error: 'Erro interno do servidor' 
-    }, { status: 500 });
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }
 
-// POST - Criar nova conversa
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    console.log('🔍 [DEBUG] Iniciando criação de conversa');
-    
     const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      console.log('❌ [DEBUG] Usuário não autenticado');
+    
+    // Verificar autenticação
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    console.log('✅ [DEBUG] Usuário autenticado:', user.id);
-
-    const { contact_id, status = 'active' } = await req.json();
-    console.log('📝 [DEBUG] Dados recebidos:', { contact_id, status });
+    const body = await request.json();
+    const { contact_id } = body;
 
     if (!contact_id) {
-      console.log('❌ [DEBUG] ID do contato não fornecido');
-      return NextResponse.json({ 
-        error: 'ID do contato é obrigatório' 
-      }, { status: 400 });
+      return NextResponse.json({ error: 'contact_id é obrigatório' }, { status: 400 });
     }
 
     // Verificar se o contato existe e pertence ao usuário
-    console.log('🔍 [DEBUG] Buscando contato:', contact_id);
-    const { data: contact, error: contactError } = await supabaseAdmin
+    const { data: contact, error: contactError } = await supabase
       .from('contacts')
-      .select('id, name, phone')
+      .select('id, name, phone, organization_id')
       .eq('id', contact_id)
-      .eq('user_id', user.id)
       .single();
 
-    if (contactError) {
-      console.log('❌ [DEBUG] Erro ao buscar contato:', contactError);
-      return NextResponse.json({ 
-        error: 'Erro ao buscar contato',
-        details: contactError.message
-      }, { status: 500 });
+    if (contactError || !contact) {
+      return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 });
     }
-
-    if (!contact) {
-      console.log('❌ [DEBUG] Contato não encontrado');
-      return NextResponse.json({ 
-        error: 'Contato não encontrado' 
-      }, { status: 404 });
-    }
-
-    console.log('✅ [DEBUG] Contato encontrado:', contact);
 
     // Verificar se já existe uma conversa com este contato
-    console.log('🔍 [DEBUG] Verificando conversa existente');
-    const { data: existingConversation, error: existingError } = await supabaseAdmin
+    const { data: existingConversation } = await supabase
       .from('conversations')
       .select('id')
       .eq('contact_id', contact_id)
       .eq('user_id', user.id)
       .single();
 
-    if (existingError && existingError.code !== 'PGRST116') {
-      console.log('❌ [DEBUG] Erro ao verificar conversa existente:', existingError);
-      return NextResponse.json({ 
-        error: 'Erro ao verificar conversa existente',
-        details: existingError.message
-      }, { status: 500 });
-    }
-
     if (existingConversation) {
-      console.log('⚠️ [DEBUG] Conversa já existe:', existingConversation);
       return NextResponse.json({ 
-        error: 'Conversa já existe com este contato' 
-      }, { status: 400 });
+        conversation: existingConversation,
+        message: 'Conversa já existe' 
+      });
     }
 
     // Criar nova conversa
-    console.log('🔍 [DEBUG] Criando nova conversa');
-    const { data: conversation, error: conversationError } = await supabaseAdmin
+    const { data: newConversation, error: conversationError } = await supabase
       .from('conversations')
       .insert({
         contact_id,
         user_id: user.id,
-        status
+        status: 'active'
       })
       .select(`
-        id,
-        contact_id,
-        user_id,
-        status,
-        created_at,
-        updated_at,
+        *,
         contacts!inner(
           id,
           name,
-          phone
+          phone,
+          created_at
         )
       `)
       .single();
 
     if (conversationError) {
-      console.log('❌ [DEBUG] Erro ao criar conversa:', conversationError);
-      return NextResponse.json({ 
-        error: 'Erro ao criar conversa',
-        details: conversationError.message
-      }, { status: 500 });
+      console.error('Erro ao criar conversa:', conversationError);
+      return NextResponse.json({ error: 'Erro ao criar conversa' }, { status: 500 });
     }
 
-    console.log('✅ [DEBUG] Conversa criada com sucesso:', conversation);
-
-    return NextResponse.json({
-      success: true,
+    return NextResponse.json({ 
       conversation: {
-        ...conversation,
-        last_message_content: '',
-        last_message_created_at: '',
-        last_message_sender: null
+        ...newConversation,
+        contact: newConversation.contacts,
+        last_message: null
       }
     });
-
-  } catch (error: any) {
-    console.error('Erro na API de criar conversa:', error);
-    return NextResponse.json({ 
-      error: 'Erro interno do servidor' 
-    }, { status: 500 });
+  } catch (error) {
+    console.error('Erro na API de conversas:', error);
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }

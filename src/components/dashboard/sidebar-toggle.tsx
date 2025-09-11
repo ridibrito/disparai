@@ -37,7 +37,7 @@ export function SidebarToggle() {
   if (collapsed) {
     return (
       <button onClick={toggle} className="p-1 rounded-md hover:bg-gray-100 transition" title="Abrir menu">
-        <Image src="/icone.png" alt="Abrir menu" width={28} height={28} className="w-7 h-7" />
+        <Image src="/icone.png" alt="Abrir menu" width={28} height={28} className="w-7 h-7" style={{ height: "auto" }} />
       </button>
     );
   }

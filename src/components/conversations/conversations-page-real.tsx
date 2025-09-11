@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { 
-  Search, 
-  MoreVertical, 
-  Plus, 
-  RefreshCw, 
-  MessageCircle, 
-  Smile, 
-  Paperclip, 
+import {
+  Search,
+  MoreVertical,
+  Plus,
+  RefreshCw,
+  MessageCircle,
+  Smile,
+  Paperclip,
   Mic,
   Filter,
   Star,
@@ -19,15 +19,16 @@ import {
   CheckCheck,
   Clock,
   Image,
-  FileText,
   AlertCircle,
-  MessageSquare
+  MessageSquare,
+  Send
 } from 'lucide-react';
 import { NewConversationModalEnhanced } from './new-conversation-modal-enhanced';
-import { MessageTemplates } from './message-templates';
 import { EmojiPicker } from './emoji-picker';
 import { TemplateSuggestions } from './template-suggestions';
 import { whatsappAPI } from '@/services/whatsapp-api';
+import { useTemplates } from '@/hooks/useTemplates';
+import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 
 interface Contact {
   id: string;
@@ -58,7 +59,7 @@ interface Conversation {
   is_favorite: boolean;
 }
 
-export default function ConversationsPageFixed() {
+export default function ConversationsPageReal() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -77,26 +78,60 @@ export default function ConversationsPageFixed() {
   const [selectedConversations, setSelectedConversations] = useState<string[]>([]);
   const [bulkActionMode, setBulkActionMode] = useState(false);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTemplateSuggestions, setShowTemplateSuggestions] = useState(false);
   const [templateSuggestions, setTemplateSuggestions] = useState<any[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
 
-  // Templates com comandos / - Personalizados pela empresa
-  const templatesWithCommands = [
-    { id: '1', name: 'Boas-vindas', content: 'Olá! Bem-vindo(a) ao nosso atendimento. Como posso ajudá-lo(a) hoje?', category: 'Atendimento', shortcut: 'boasvindas' },
-    { id: '2', name: 'Agradecimento', content: 'Obrigado pelo seu contato! Foi um prazer atendê-lo(a).', category: 'Atendimento', shortcut: 'obrigado' }
-  ];
+  // Hook para gerenciar templates do banco de dados
+  const { getQuickMessageTemplates, loading: templatesLoading } = useTemplates();
+  const templatesFromDB = getQuickMessageTemplates();
 
-  // Função para adicionar campos padrão às conversas
+  // Hook para atualizações em tempo real
+  const { updateMessageStatus } = useRealtimeMessages({
+    conversationId: selectedConversation?.id,
+    onNewMessage: (message) => {
+      // Adicionar nova mensagem recebida
+      setMessages(prev => [...prev, message]);
+      
+      // Atualizar conversa na lista
+      setConversations(prev => prev.map(conv => 
+        conv.id === message.conversation_id 
+          ? { 
+              ...conv, 
+              last_message_content: message.content,
+              last_message_created_at: message.created_at,
+              unread_count: message.sender === 'contact' ? conv.unread_count + 1 : conv.unread_count
+            }
+          : conv
+      ));
+    },
+    onMessageStatusUpdate: (messageId, status) => {
+      // Atualizar status da mensagem
+      setMessages(prev => prev.map(msg => 
+        msg.id === messageId 
+          ? { ...msg, status: status as any }
+          : msg
+      ));
+    },
+    onConversationUpdate: (conversation) => {
+      // Atualizar conversa
+      setConversations(prev => prev.map(conv => 
+        conv.id === conversation.id 
+          ? { ...conv, ...conversation }
+          : conv
+      ));
+    }
+  });
+
+  // Função helper para adicionar campos padrão
   const addDefaultFields = (conversations: any[]): Conversation[] => {
-    return conversations.map((conv, index) => ({
+    return conversations.map(conv => ({
       ...conv,
-      unread_count: Math.floor(Math.random() * 5), // 0-4 mensagens não lidas
-      has_attachments: Math.random() > 0.7, // 30% chance de ter anexos
-      is_archived: Math.random() > 0.9, // 10% chance de estar arquivada
-      is_favorite: index < 3 // Primeiras 3 são favoritas
+      unread_count: conv.unread_count || 0,
+      has_attachments: conv.has_attachments || false,
+      is_archived: conv.is_archived || false,
+      is_favorite: conv.is_favorite || false
     }));
   };
 
@@ -113,7 +148,8 @@ export default function ConversationsPageFixed() {
         name: 'João Silva',
         phone: '+55 11 9999-0001',
         created_at: new Date().toISOString()
-      }
+      },
+      unread_count: 2
     },
     {
       id: 'mock-2',
@@ -126,7 +162,9 @@ export default function ConversationsPageFixed() {
         name: 'Maria Santos',
         phone: '+55 11 9999-0002',
         created_at: new Date().toISOString()
-      }
+      },
+      has_attachments: true,
+      is_favorite: true
     },
     {
       id: 'mock-3',
@@ -408,26 +446,62 @@ export default function ConversationsPageFixed() {
   ];
 
   useEffect(() => {
-    // Simular carregamento
-    setTimeout(() => {
-      setConversations(mockConversations);
-      setLoadingConversations(false);
-    }, 500);
+    fetchConversations();
   }, []);
+
+  // Buscar conversas
+  const fetchConversations = async () => {
+    try {
+      setLoadingConversations(true);
+      
+      const response = await fetch('/api/conversations');
+      if (!response.ok) {
+        throw new Error('Erro ao buscar conversas');
+      }
+      
+      const data = await response.json();
+      setConversations(data.conversations || []);
+    } catch (error) {
+      console.error('Erro ao carregar conversas:', error);
+      toast.error('Erro ao carregar conversas');
+      // Fallback para dados mock em caso de erro
+      setConversations(mockConversations);
+    } finally {
+      setLoadingConversations(false);
+    }
+  };
 
   useEffect(() => {
     if (selectedConversation) {
-      setLoadingMessages(true);
-      setTimeout(() => {
-        if (selectedConversation.id === 'mock-1') {
-          setMessages(mockMessages);
-        } else {
-          setMessages([]);
-        }
-        setLoadingMessages(false);
-      }, 300);
+      fetchMessages(selectedConversation.id);
     }
   }, [selectedConversation]);
+
+  // Buscar mensagens de uma conversa
+  const fetchMessages = async (conversationId: string) => {
+    try {
+      setLoadingMessages(true);
+      
+      const response = await fetch(`/api/conversations/${conversationId}/messages`);
+      if (!response.ok) {
+        throw new Error('Erro ao buscar mensagens');
+      }
+      
+      const data = await response.json();
+      setMessages(data.messages || []);
+    } catch (error) {
+      console.error('Erro ao carregar mensagens:', error);
+      toast.error('Erro ao carregar mensagens');
+      // Fallback para dados mock em caso de erro
+      if (conversationId === 'mock-1') {
+        setMessages(mockMessages);
+      } else {
+        setMessages([]);
+      }
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
 
   // Fechar menu quando clicar fora
   useEffect(() => {
@@ -531,7 +605,7 @@ export default function ConversationsPageFixed() {
     toast.success('Marcado como lido');
   };
 
-  const handleStartNewConversation = (contact: Contact) => {
+  const handleStartNewConversation = async (contact: Contact) => {
     // Verificar se já existe uma conversa com este contato
     const existingConversation = conversations.find(conv => conv.contact_id === contact.id);
     
@@ -539,23 +613,33 @@ export default function ConversationsPageFixed() {
       setSelectedConversation(existingConversation);
       toast.success('Conversa existente selecionada');
     } else {
-      // Criar nova conversa
-      const newConversation: Conversation = {
-        id: `new-${Date.now()}`,
-        contact_id: contact.id,
-        last_message_content: null,
-        last_message_created_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        contacts: contact,
-        unread_count: 0,
-        has_attachments: false,
-        is_archived: false,
-        is_favorite: false
-      };
-      
-      setConversations(prev => [newConversation, ...prev]);
-      setSelectedConversation(newConversation);
-      toast.success('Nova conversa iniciada');
+      try {
+        // Criar nova conversa via API
+        const response = await fetch('/api/conversations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contact_id: contact.id
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const newConversation = data.conversation;
+          
+          setConversations(prev => [newConversation, ...prev]);
+          setSelectedConversation(newConversation);
+          toast.success('Nova conversa iniciada');
+        } else {
+          const errorData = await response.json();
+          toast.error(errorData.error || 'Erro ao criar conversa');
+        }
+      } catch (error) {
+        console.error('Erro ao criar conversa:', error);
+        toast.error('Erro ao criar conversa');
+      }
     }
   };
 
@@ -688,11 +772,6 @@ export default function ConversationsPageFixed() {
     }
   };
 
-  const handleUseTemplate = (template: { content: string }) => {
-    setNewMessage(template.content);
-    setShowTemplates(false);
-  };
-
   const handleSelectEmoji = (emoji: string) => {
     setNewMessage(prev => prev + emoji);
     setShowEmojiPicker(false);
@@ -708,12 +787,12 @@ export default function ConversationsPageFixed() {
       
       if (command.length === 0) {
         // Mostrar todos os templates quando digitar apenas /
-        setTemplateSuggestions(templatesWithCommands);
+        setTemplateSuggestions(templatesFromDB);
         setShowTemplateSuggestions(true);
         setSelectedSuggestionIndex(0);
       } else {
         // Filtrar templates baseado no comando digitado
-        const suggestions = templatesWithCommands.filter(template =>
+        const suggestions = templatesFromDB.filter(template =>
           template.shortcut.toLowerCase().startsWith(command) ||
           template.name.toLowerCase().includes(command)
         );
@@ -779,18 +858,29 @@ export default function ConversationsPageFixed() {
     setNewMessage('');
 
     try {
-      // Enviar mensagem via API do WhatsApp
-      const response = await whatsappAPI.sendMessage({
-        to: selectedConversation.contacts.phone,
-        message: messageContent,
-        type: 'text'
+      // Enviar mensagem via API real
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: messageContent,
+          type: 'text'
+        })
       });
 
-      if (response.success && response.messageId) {
-        // Atualizar mensagem com ID real
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Atualizar mensagem com dados reais
         setMessages(prev => prev.map(msg => 
           msg.id === tempMessage.id 
-            ? { ...msg, id: response.messageId!, status: 'sent' }
+            ? { 
+                ...msg, 
+                id: data.message.id,
+                status: data.message.status
+              }
             : msg
         ));
 
@@ -806,19 +896,15 @@ export default function ConversationsPageFixed() {
         ));
 
         toast.success('Mensagem enviada com sucesso!');
-        
-        // Simular atualização de status
-        if (response.messageId) {
-          whatsappAPI.simulateMessageDelivery(response.messageId);
-        }
       } else {
+        const errorData = await response.json();
         // Falha no envio
         setMessages(prev => prev.map(msg => 
           msg.id === tempMessage.id 
             ? { ...msg, status: 'failed' }
             : msg
         ));
-        toast.error(response.error || 'Erro ao enviar mensagem');
+        toast.error(errorData.error || 'Erro ao enviar mensagem');
       }
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
@@ -1186,13 +1272,6 @@ export default function ConversationsPageFixed() {
                 >
                   <Smile className="h-5 w-5" />
                 </button>
-                <button 
-                  onClick={() => setShowTemplates(true)}
-                  className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors"
-                  title="Templates"
-                >
-                  <MessageSquare className="h-5 w-5" />
-                </button>
                 <input
                   type="file"
                   id="media-input"
@@ -1229,9 +1308,7 @@ export default function ConversationsPageFixed() {
                   {sendingMessage ? (
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
                   ) : (
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
+                    <Send className="h-5 w-5" />
                   )}
                 </button>
               </div>
@@ -1254,14 +1331,6 @@ export default function ConversationsPageFixed() {
         onClose={() => setShowNewConversationModal(false)}
         onStartConversation={handleStartNewConversation}
       />
-
-      {/* Modal de Templates */}
-      {showTemplates && (
-        <MessageTemplates
-          onSelectTemplate={handleUseTemplate}
-          onClose={() => setShowTemplates(false)}
-        />
-      )}
 
       {/* Emoji Picker */}
       {showEmojiPicker && (

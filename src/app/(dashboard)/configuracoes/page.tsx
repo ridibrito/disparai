@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Settings, User, CreditCard, Wifi, Shield, Bell, Download, Users } from 'lucide-react';
+import { Settings, User, CreditCard, Wifi, Shield, Bell, Download, Users, FileText } from 'lucide-react';
 
 export const metadata = {
   title: 'Configurações - disparai',
@@ -49,6 +49,13 @@ export default function ConfiguracoesPage() {
       icon: Users,
       href: '/configuracoes/usuarios',
       color: 'text-emerald-500'
+    },
+    {
+      title: 'Templates',
+      description: 'Gerencie templates de mensagens e campanhas',
+      icon: FileText,
+      href: '/configuracoes/templates',
+      color: 'text-indigo-500'
     }
   ];
 

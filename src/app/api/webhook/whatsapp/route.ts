@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { createClient as createAdminClient } from '@supabase/supabase-js';
 
 // Cliente admin para operações que precisam de mais permissões
@@ -189,9 +189,9 @@ export async function POST(request: NextRequest) {
       console.log(`🔌 Status da conexão: ${body.status || body.connection}`);
       
       // Atualizar status da conexão no banco
-      const supabase = createClient();
+      const supabaseClient = supabase;
       
-      const { error } = await supabase
+      const { error } = await supabaseClient
         .from('api_connections')
         .update({ 
           status: body.status === 'connected' ? 'active' : 'inactive',
@@ -212,9 +212,9 @@ export async function POST(request: NextRequest) {
       console.log(`📬 Status de entrega: ${body.status} para ${body.to}`);
       
       // Atualizar status da mensagem no banco
-      const supabase = createClient();
+      const supabaseClient = supabase;
       
-      const { error } = await supabase
+      const { error } = await supabaseClient
         .from('messages')
         .update({ 
           status: body.status,

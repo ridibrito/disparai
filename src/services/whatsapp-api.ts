@@ -33,11 +33,16 @@ class WhatsAppAPIService {
     this.instanceId = process.env.NEXT_PUBLIC_WHATSAPP_INSTANCE_ID || '';
   }
 
+  // Método para definir a instância ativa
+  setActiveInstance(instanceKey: string) {
+    this.instanceId = instanceKey;
+  }
+
   async sendMessage(message: WhatsAppMessage): Promise<WhatsAppResponse> {
     try {
-      // Verificar se temos as credenciais necessárias
-      if (!this.apiKey || !this.instanceId) {
-        console.warn('Credenciais da API não configuradas, usando modo simulação');
+      // Verificar se temos a instância configurada
+      if (!this.instanceId) {
+        console.warn('Instância WhatsApp não configurada, usando modo simulação');
         // Modo simulação para desenvolvimento
         await new Promise(resolve => setTimeout(resolve, 1500));
         const messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -45,21 +50,28 @@ class WhatsAppAPIService {
         return { success: true, messageId };
       }
 
-      // Chamada real para a API do Disparai
-      const response = await fetch(`${this.baseUrl}/send-message`, {
+      // Usar MegaAPI para envio
+      const host = process.env.MEGA_HOST || 'https://teste8.megaapi.com.br';
+      const token = process.env.MEGA_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
+
+      const payload: any = {
+        number: message.to,
+        text: message.message
+      };
+
+      if (message.type === 'image' && message.mediaUrl) {
+        payload.image = message.mediaUrl;
+      } else if (message.type === 'document' && message.mediaUrl) {
+        payload.document = message.mediaUrl;
+      }
+
+      const response = await fetch(`${host}/rest/sendMessage/${this.instanceId}`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          instanceId: this.instanceId,
-          to: message.to,
-          message: message.message,
-          type: message.type || 'text',
-          ...(message.mediaUrl && { mediaUrl: message.mediaUrl }),
-          ...(message.filename && { filename: message.filename }),
-        }),
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -68,11 +80,13 @@ class WhatsAppAPIService {
       }
 
       const data = await response.json();
-      console.log(`[WhatsApp API] Mensagem enviada para ${message.to}: ${message.message} (ID: ${data.messageId})`);
+      const messageId = data.key?.id || data.id || `msg_${Date.now()}`;
+      
+      console.log(`[WhatsApp API] Mensagem enviada para ${message.to}: ${message.message} (ID: ${messageId})`);
       
       return {
         success: true,
-        messageId: data.messageId || data.id || `msg_${Date.now()}`,
+        messageId,
       };
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);

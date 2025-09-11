@@ -16,7 +16,8 @@ import {
   Circle,
   Copy,
   Phone,
-  Trash
+  Trash,
+  Settings
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import SimpleWhatsAppConnection from './SimpleWhatsAppConnection';
@@ -636,6 +637,74 @@ export default function SimpleConnectionsTabs() {
     }
   };
 
+  // Função para configurar webhook automaticamente
+  const handleConfigureWebhook = async (instanceKey: string) => {
+    try {
+      setIsProcessing(true);
+      
+      console.log('🔧 Configurando webhook para instância:', instanceKey);
+      
+      const response = await fetch('/api/webhook/configure', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instanceKey
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success('Webhook configurado com sucesso!');
+        console.log('Webhook configurado:', data.webhookUrl);
+        await loadConnections(); // Recarregar lista
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Erro ao configurar webhook');
+      }
+    } catch (error) {
+      console.error('Erro ao configurar webhook:', error);
+      toast.error('Erro ao configurar webhook');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Função para testar webhook
+  const handleTestWebhook = async (instanceKey: string) => {
+    try {
+      setIsProcessing(true);
+      
+      console.log('🧪 Testando webhook para instância:', instanceKey);
+      
+      const response = await fetch('/api/test-webhook', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instanceKey,
+          testMessage: 'Teste de webhook - ' + new Date().toLocaleTimeString()
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success('Webhook testado com sucesso! Verifique as conversas.');
+        console.log('Webhook testado:', data);
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Erro ao testar webhook');
+      }
+    } catch (error) {
+      console.error('Erro ao testar webhook:', error);
+      toast.error('Erro ao testar webhook');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
 
   // Filtrar conexões por tipo
   const disparaiConnections = connections.filter(conn => conn.type === 'whatsapp_disparai');
@@ -873,14 +942,44 @@ export default function SimpleConnectionsTabs() {
                             <code className="text-xs bg-gray-100 px-2 py-1 rounded flex-1 truncate">
                               {connection.webhook_url || 'http://localhost:3000/api/webhooks/whatsapp/...'}
                             </code>
-                            <Button 
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleCopyWebhook(connection.webhook_url || 'http://localhost:3000/api/webhooks/whatsapp/...')}
-                              className="h-6 px-2 text-xs"
-                            >
-                              <Copy className="w-3 h-3" />
-                            </Button>
+                            <div className="flex gap-1">
+                              <Button 
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleCopyWebhook(connection.webhook_url || 'http://localhost:3000/api/webhooks/whatsapp/...')}
+                                className="h-6 px-2 text-xs"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </Button>
+                              <Button 
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleConfigureWebhook(connection.instance_key)}
+                                disabled={isProcessing}
+                                className="h-6 px-2 text-xs"
+                                title="Configurar webhook"
+                              >
+                                {isProcessing ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Settings className="w-3 h-3" />
+                                )}
+                              </Button>
+                              <Button 
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleTestWebhook(connection.instance_key)}
+                                disabled={isProcessing}
+                                className="h-6 px-2 text-xs"
+                                title="Testar webhook"
+                              >
+                                {isProcessing ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <MessageCircle className="w-3 h-3" />
+                                )}
+                              </Button>
+                            </div>
                           </div>
                         </div>
                         

@@ -4,19 +4,21 @@ import { env } from './env';
 // Carrega as credenciais da Service Account do Base64
 function getServiceAccountCredentials() {
   if (!env.google.saJsonBase64) {
-    throw new Error('GOOGLE_SA_JSON_BASE64 environment variable is not set.');
+    console.warn('GOOGLE_SA_JSON_BASE64 environment variable is not set. Google Calendar features will be disabled.');
+    return null;
   }
   const decoded = Buffer.from(env.google.saJsonBase64, 'base64').toString('utf8');
   return JSON.parse(decoded);
 }
 
 // Inicializa o cliente JWT para autenticação
-const auth = new google.auth.JWT(
-  getServiceAccountCredentials().client_email,
+const credentials = getServiceAccountCredentials();
+const auth = credentials ? new google.auth.JWT(
+  credentials.client_email,
   undefined,
-  getServiceAccountCredentials().private_key,
+  credentials.private_key,
   ['https://www.googleapis.com/auth/calendar']
-);
+) : null;
 
 // Inicializa o serviço do Google Calendar
 const calendar = google.calendar({ version: 'v3', auth });
@@ -38,6 +40,11 @@ export async function createCalendarEvent({
   attendees,
   calendarId = 'primary',
 }: CreateEventParams) {
+  if (!auth) {
+    console.warn('Google Calendar auth not available. Skipping calendar event creation.');
+    return { success: false, error: 'Google Calendar not configured' };
+  }
+  
   try {
     const event = {
       summary,
