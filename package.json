@@ -13,7 +13,6 @@
     "lint:fix": "next lint --fix",
     "type-check": "tsc --noEmit",
     "worker:broadcast": "ts-node --transpile-only worker/broadcast.ts",
-    "postbuild": "next-sitemap",
     "vercel-build": "npm run build"
   },
   "dependencies": {
