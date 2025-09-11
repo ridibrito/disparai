@@ -3,7 +3,7 @@ import { env } from './env';
 import { createCalendarEvent } from './google-calendar';
 import { createRDStationDeal } from './rd-station';
 
-const client = new OpenAI({ apiKey: env.openai.apiKey });
+const client = env.openai.apiKey ? new OpenAI({ apiKey: env.openai.apiKey }) : null;
 
 export type AIResult = {
   intent: string;
@@ -102,6 +102,18 @@ export async function runAI(
   }
 ): Promise<AIResult> {
   try {
+    // Verificar se o cliente OpenAI está disponível
+    if (!client) {
+      console.warn('OpenAI client not available - returning fallback response');
+      return {
+        reply: 'Desculpe, o serviço de IA não está disponível no momento. Um humano vai assumir o atendimento.',
+        intent: 'handoff',
+        confidence: 0.1,
+        handoff: true,
+        qualification_status: 'unqualified',
+      };
+    }
+
     let messages = [
       { role: 'system' as const, content: SYSTEM_PROMPT },
       ...input.messages,
