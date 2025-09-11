@@ -9,6 +9,14 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: Request) {
   try {
+    // Verificar se está em ambiente de build
+    if (process.env.NODE_ENV === 'production' && !req.headers.get('authorization')) {
+      return NextResponse.json({ 
+        ok: true, 
+        message: 'API disponível apenas em runtime' 
+      });
+    }
+
     console.log('🔄 Aplicando migração para conectar campanhas com instâncias WhatsApp...');
 
     // SQL da migração
