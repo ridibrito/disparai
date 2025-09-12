@@ -24,17 +24,18 @@ export async function POST(request: NextRequest) {
     }
     
     // Verificar se o usuário tem permissão para API personalizada
-    const { data: userPlan } = await supabase
-      .from('user_plans')
+    const { data: user } = await supabase
+      .from('users')
       .select(`
         plans!inner(
           api_personalizada,
           api_limit
         )
       `)
-      .eq('user_id', session.user.id)
-      .eq('status', 'active')
+      .eq('id', session.user.id)
       .single();
+    
+    const userPlan = user;
     
     if (!userPlan?.plans?.api_personalizada) {
       return NextResponse.json(

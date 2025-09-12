@@ -12,14 +12,16 @@ export async function GET() {
   
   try {
     // Buscar informações do plano do usuário
-    const { data: userPlan } = await supabase
-      .from('user_plans')
+    const { data: user } = await supabase
+      .from('users')
       .select('*, plans(*)')
-      .eq('user_id', session.user.id)
+      .eq('id', session.user.id)
       .single();
     
+    const userPlan = user;
+    
     // Verificar se o usuário tem um plano pago ativo
-    const hasPaidPlan = userPlan?.plans?.price > 0 && userPlan?.status === 'active';
+    const hasPaidPlan = userPlan?.plans?.price > 0;
     
     if (!hasPaidPlan) {
       return NextResponse.redirect(new URL('/dashboard/settings/billing', process.env.NEXT_PUBLIC_SITE_URL));
@@ -29,12 +31,12 @@ export async function GET() {
     // Nota: Em um ambiente real, aqui você integraria com o provedor de pagamentos
     // para cancelar a assinatura no sistema deles também
     const { error } = await supabase
-      .from('user_plans')
+      .from('users')
       .update({
-        status: 'canceled',
+        plan_id: null, // Remove o plano ativo
         updated_at: new Date().toISOString(),
       })
-      .eq('user_id', session.user.id);
+      .eq('id', session.user.id);
     
     if (error) throw error;
     

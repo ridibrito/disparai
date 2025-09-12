@@ -140,11 +140,13 @@ export function DisparoForm({ userId, initialData, isEditing = false }: DisparoF
         setContactLists(listsWithCount);
         
         // Verificar limite de mensagens
-        const { data: userPlan } = await supabase
-          .from('user_plans')
+        const { data: user } = await supabase
+          .from('users')
           .select('*, plans(*)')
-          .eq('user_id', userId)
+          .eq('id', userId)
           .single();
+        
+        const userPlan = user;
         
         const limit = userPlan?.plans?.features?.campaign_message_limit || 100;
         setMessageLimit(limit);

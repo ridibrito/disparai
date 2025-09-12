@@ -34,11 +34,13 @@ export default async function DashboardLayout({
   }
 
   // Obter status de assinatura/plano do usuário
-  const { data: userPlan } = await supabase
-    .from('user_plans' as any)
-    .select('status, trial_start, trial_end')
-    .eq('user_id', user.id as any)
-    .maybeSingle();
+  const { data: userData } = await supabase
+    .from('users')
+    .select('plan_id, plans(*)')
+    .eq('id', user.id as any)
+    .single();
+  
+  const userPlan = userData;
 
   let trialBanner: React.ReactNode = null;
   if (userPlan && userPlan.status === 'trialing' && userPlan.trial_end) {

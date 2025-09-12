@@ -29,21 +29,23 @@ export function PlanSummary({ userId }: PlanSummaryProps) {
         setLoading(true);
         
         // Buscar detalhes do plano do usuário
-        const { data: userPlan, error: userError } = await supabase
-          .from('user_plans' as any)
+        const { data: user, error: userError } = await supabase
+          .from('users')
           .select('*, plans(*)')
-          .eq('user_id', userId as any)
+          .eq('id', userId as any)
           .single();
         
         if (userError) {
-          console.warn('Aviso: falha ao buscar plano do usuário:', userError.message);
+          console.warn('Aviso: falha ao buscar usuário:', userError.message);
           return;
         }
 
-        if (!userPlan || !(userPlan as any).plans) {
+        if (!user || !user.plans) {
           console.warn('Aviso: usuário sem plano vinculado. Exibindo fallback.');
           return;
         }
+
+        const userPlan = user;
         
         // Contar contatos
         const { count: contactCount } = await supabase

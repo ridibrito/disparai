@@ -49,6 +49,11 @@ const envSchema = z.object({
     host: z.string().min(1).optional(),
     token: z.string().min(1).optional(),
   }),
+
+  // NGROK
+  ngrok: z.object({
+    authToken: z.string().min(1).optional(),
+  }),
 });
 
 export const env = envSchema.parse({
@@ -85,5 +90,8 @@ export const env = envSchema.parse({
   megaApi: {
     host: process.env.MEGA_API_HOST,
     token: process.env.MEGA_API_TOKEN,
+  },
+  ngrok: {
+    authToken: process.env.NGROK_AUTHTOKEN,
   },
 });

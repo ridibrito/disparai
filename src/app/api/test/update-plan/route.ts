@@ -60,22 +60,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Falha ao atualizar plano' }, { status: 500 });
     }
 
-    // Garantir entrada na tabela user_plans
-    const { error: userPlanError } = await supabase
-      .from('user_plans')
-      .upsert({
-        user_id: user.id,
+    // Atualizar plano do usuário diretamente na tabela users
+    const { error: userUpdateError } = await supabase
+      .from('users')
+      .update({
         plan_id: businessPlan.id,
-        status: 'active',
-        created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'user_id'
-      });
+      })
+      .eq('id', user.id);
 
-    if (userPlanError) {
-      console.error('Erro ao atualizar user_plans:', userPlanError);
-      return NextResponse.json({ error: 'Falha ao atualizar user_plans' }, { status: 500 });
+    if (userUpdateError) {
+      console.error('Erro ao atualizar plano do usuário:', userUpdateError);
+      return NextResponse.json({ error: 'Falha ao atualizar plano do usuário' }, { status: 500 });
     }
 
     console.log('✅ Plano alterado para Empresarial com sucesso!');

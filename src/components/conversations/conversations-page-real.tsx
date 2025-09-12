@@ -29,6 +29,9 @@ import { TemplateSuggestions } from './template-suggestions';
 import { whatsappAPI } from '@/services/whatsapp-api';
 import { useTemplates } from '@/hooks/useTemplates';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
+import { useGlobalNotifications } from '@/hooks/useGlobalNotifications';
+import { useAuth } from '@/contexts/AuthContext';
+import { NotificationPermissionBanner } from '@/components/notifications/NotificationPermissionBanner';
 
 interface Contact {
   id: string;
@@ -60,6 +63,7 @@ interface Conversation {
 }
 
 export default function ConversationsPageReal() {
+  const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -121,6 +125,44 @@ export default function ConversationsPageReal() {
           ? { ...conv, ...conversation }
           : conv
       ));
+    }
+  });
+
+  // Hook para notificações globais
+  const { unreadCount, markAsRead, testNotification } = useGlobalNotifications({
+    userId: user?.id,
+    onNewMessage: (message, conversation) => {
+      // Atualizar lista de conversas
+      setConversations(prev => {
+        const existingIndex = prev.findIndex(conv => conv.id === conversation.id);
+        if (existingIndex >= 0) {
+          // Atualizar conversa existente
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            last_message_content: message.content,
+            last_message_created_at: message.created_at,
+            unread_count: updated[existingIndex].unread_count + 1
+          };
+          // Mover para o topo
+          const [moved] = updated.splice(existingIndex, 1);
+          return [moved, ...updated];
+        } else {
+          // Adicionar nova conversa
+          return [conversation, ...prev];
+        }
+      });
+
+      // Se a conversa está selecionada, adicionar mensagem
+      if (selectedConversation?.id === conversation.id) {
+        setMessages(prev => [...prev, message]);
+        // Marcar como lida se a conversa está aberta
+        markAsRead(conversation.id);
+      }
+    },
+    onNewConversation: (conversation) => {
+      // Adicionar nova conversa à lista
+      setConversations(prev => [conversation, ...prev]);
     }
   });
 
@@ -445,9 +487,65 @@ export default function ConversationsPageReal() {
     }
   ];
 
+  // Função para marcar como lida (declarada antes dos useEffects)
+  const handleMarkAsRead = async (conversationId: string) => {
+    try {
+      // Marcar como lida localmente
+      setConversations(prev => prev.map(conv => 
+        conv.id === conversationId 
+          ? { ...conv, unread_count: 0 }
+          : conv
+      ));
+      
+      // Marcar como lida no hook
+      markAsRead(conversationId);
+      
+      // Enviar confirmação de leitura via API
+      const response = await fetch(`/api/conversations/${conversationId}/mark-read`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (response.ok) {
+        toast.success('Marcado como lido');
+      } else {
+        console.error('Erro ao marcar como lido');
+      }
+    } catch (error) {
+      console.error('Erro ao marcar como lido:', error);
+    }
+  };
+
   useEffect(() => {
     fetchConversations();
   }, []);
+
+  // Listener para marcar conversa como lida quando notificação for clicada
+  useEffect(() => {
+    const handleMarkConversationAsRead = async (event: CustomEvent) => {
+      const { conversationId } = event.detail;
+      console.log('🔔 Marcando conversa como lida via notificação:', conversationId);
+      
+      // Usar a função completa de marcar como lida
+      await handleMarkAsRead(conversationId);
+      
+      // Selecionar a conversa se não estiver selecionada
+      if (!selectedConversation || selectedConversation.id !== conversationId) {
+        const conversation = conversations.find(conv => conv.id === conversationId);
+        if (conversation) {
+          setSelectedConversation(conversation);
+        }
+      }
+    };
+
+    window.addEventListener('markConversationAsRead', handleMarkConversationAsRead as EventListener);
+    
+    return () => {
+      window.removeEventListener('markConversationAsRead', handleMarkConversationAsRead as EventListener);
+    };
+  }, [conversations, selectedConversation, handleMarkAsRead]);
 
   // Buscar conversas
   const fetchConversations = async () => {
@@ -474,8 +572,23 @@ export default function ConversationsPageReal() {
   useEffect(() => {
     if (selectedConversation) {
       fetchMessages(selectedConversation.id);
+      
+      // Marcar como lida automaticamente quando a conversa for selecionada
+      if (selectedConversation.unread_count > 0) {
+        handleMarkAsRead(selectedConversation.id);
+      }
     }
   }, [selectedConversation]);
+
+  // Scroll automático para a última mensagem
+  useEffect(() => {
+    if (messages.length > 0) {
+      const messagesContainer = document.querySelector('.messages-container');
+      if (messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+    }
+  }, [messages]);
 
   // Buscar mensagens de uma conversa
   const fetchMessages = async (conversationId: string) => {
@@ -594,15 +707,6 @@ export default function ConversationsPageReal() {
       }
       toast.success('Conversa excluída');
     }
-  };
-
-  const handleMarkAsRead = (conversationId: string) => {
-    setConversations(prev => prev.map(conv => 
-      conv.id === conversationId 
-        ? { ...conv, unread_count: 0 }
-        : conv
-    ));
-    toast.success('Marcado como lido');
   };
 
   const handleStartNewConversation = async (contact: Contact) => {
@@ -872,6 +976,7 @@ export default function ConversationsPageReal() {
 
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Mensagem enviada:', data);
         
         // Atualizar mensagem com dados reais
         setMessages(prev => prev.map(msg => 
@@ -879,7 +984,7 @@ export default function ConversationsPageReal() {
             ? { 
                 ...msg, 
                 id: data.message.id,
-                status: data.message.status
+                status: 'sent' // Inicialmente como 'sent', será atualizado via webhook
               }
             : msg
         ));
@@ -898,6 +1003,7 @@ export default function ConversationsPageReal() {
         toast.success('Mensagem enviada com sucesso!');
       } else {
         const errorData = await response.json();
+        console.error('❌ Erro ao enviar mensagem:', errorData);
         // Falha no envio
         setMessages(prev => prev.map(msg => 
           msg.id === tempMessage.id 
@@ -926,7 +1032,14 @@ export default function ConversationsPageReal() {
       <div className="w-96 border-r border-gray-200 bg-white flex flex-col">
         {/* Header da sidebar */}
         <div className="flex-shrink-0 h-16 bg-gray-50 border-b border-gray-200 flex items-center justify-between px-4">
-          <h1 className="text-lg font-semibold text-gray-900">Conversas</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold text-gray-900">Conversas</h1>
+            {unreadCount > 0 && (
+              <span className="bg-green-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
+                {unreadCount}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1">
             <button 
               onClick={() => setShowNewConversationModal(true)}
@@ -934,8 +1047,18 @@ export default function ConversationsPageReal() {
             >
               <Plus className="h-5 w-5" />
             </button>
-            <button className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors">
+            <button 
+              onClick={() => fetchConversations()}
+              className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors"
+            >
               <RefreshCw className="h-5 w-5" />
+            </button>
+            <button 
+              onClick={testNotification}
+              className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors"
+              title="Testar notificação"
+            >
+              🔔
             </button>
             <button 
               onClick={() => setBulkActionMode(!bulkActionMode)}
@@ -1220,7 +1343,7 @@ export default function ConversationsPageReal() {
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 relative bg-gray-100">
+            <div className="messages-container flex-1 overflow-y-auto p-4 space-y-4 relative bg-gray-100">
               <div className="relative z-10 pb-4">
                 {loadingMessages ? (
                   <div className="text-center text-gray-500 py-8">Carregando mensagens...</div>
@@ -1349,6 +1472,9 @@ export default function ConversationsPageReal() {
           onClose={() => setShowTemplateSuggestions(false)}
         />
       )}
+
+      {/* Banner de permissão de notificações */}
+      <NotificationPermissionBanner />
     </div>
   );
 }
