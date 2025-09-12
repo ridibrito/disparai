@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { createClientComponentClient } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useNativeNotifications } from './useNativeNotifications';
+import { useNotifications } from '@/contexts/NotificationContext';
 
 interface Message {
   id: string;
@@ -36,6 +37,7 @@ export function useGlobalNotifications({
 }: UseGlobalNotificationsProps) {
   const supabase = createClientComponentClient();
   const { showNotification, updateBadge, updateTitle, requestPermission } = useNativeNotifications();
+  const { addNotification } = useNotifications();
   const [unreadCount, setUnreadCount] = useState(0);
   const [reconnectKey, setReconnectKey] = useState(0);
   
@@ -86,11 +88,24 @@ export function useGlobalNotifications({
     });
     console.log('🔔 Notificação nativa disparada!');
 
+    // Adicionar notificação no sistema de notificações
+    addNotification({
+      type: 'message',
+      title: `Nova mensagem de ${conversation.contacts?.name || 'Contato'}`,
+      message: message.content.length > 100 
+        ? `${message.content.substring(0, 100)}...` 
+        : message.content,
+      conversationId: conversation.id,
+      contactName: conversation.contacts?.name,
+      contactPhone: conversation.contacts?.phone
+    });
+    console.log('🔔 Notificação adicionada ao sistema!');
+
     // Chamar callback se fornecido
     if (onNewMessageRef.current) {
       onNewMessageRef.current(message, conversation);
     }
-  }, [showNotification, updateBadge, updateTitle]);
+  }, [showNotification, updateBadge, updateTitle, addNotification]);
 
   const handleNewConversation = useCallback(async (conversation: Conversation) => {
     // Atualizar contador de não lidas
@@ -137,9 +152,23 @@ export function useGlobalNotifications({
     
     const pollForNewMessages = async () => {
       try {
+        console.log('🔍 Polling executado para usuário:', userId);
+        
         // Buscar mensagens não lidas dos últimos 30 segundos
         const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
         
+        // Primeiro buscar a organização do usuário
+        const { data: userData } = await supabase
+          .from('users')
+          .select('organization_id')
+          .eq('id', userId)
+          .single();
+
+        if (!userData?.organization_id) {
+          console.log('🔍 Debug - Usuário sem organização');
+          return;
+        }
+
         const { data: messages, error } = await supabase
           .from('messages')
           .select(`
@@ -158,6 +187,7 @@ export function useGlobalNotifications({
             )
           `)
           .eq('sender', 'contact')
+          .eq('organization_id', userData.organization_id)
           .gte('created_at', thirtySecondsAgo)
           .order('created_at', { ascending: false });
 
@@ -169,16 +199,20 @@ export function useGlobalNotifications({
         if (messages && messages.length > 0) {
           console.log('🔔 Mensagens encontradas via polling:', messages.length);
           
-          for (const message of messages) {
-            // Verificar se a mensagem já foi processada
-            if (processedMessagesRef.current.has(message.id)) {
-              console.log('⏭️ Mensagem já processada:', message.id);
-              continue;
-            }
-            
+          // Filtrar apenas mensagens não processadas
+          const newMessages = messages.filter(msg => !processedMessagesRef.current.has(msg.id));
+          
+          if (newMessages.length === 0) {
+            console.log('⏭️ Nenhuma mensagem nova para processar');
+            return;
+          }
+          
+          console.log('🔔 Novas mensagens para processar:', newMessages.length);
+          
+          for (const message of newMessages) {
             const conversation = message.conversations;
             if (conversation) {
-              // Marcar mensagem como processada
+              // Marcar mensagem como processada ANTES de processar
               processedMessagesRef.current.add(message.id);
               console.log('✅ Processando nova mensagem:', message.id);
               await handleNewMessage(message, conversation);
@@ -193,11 +227,11 @@ export function useGlobalNotifications({
     // Executar polling a cada 5 segundos
     pollInterval = setInterval(pollForNewMessages, 5000);
     
-    // Limpar cache de mensagens processadas a cada 5 minutos
+    // Limpar cache de mensagens processadas a cada 1 hora
     const cleanupInterval = setInterval(() => {
       processedMessagesRef.current.clear();
       console.log('🧹 Cache de mensagens processadas limpo');
-    }, 5 * 60 * 1000);
+    }, 60 * 60 * 1000);
     
     // Executar imediatamente
     pollForNewMessages();

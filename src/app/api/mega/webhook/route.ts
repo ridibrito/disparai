@@ -141,7 +141,7 @@ export async function POST(req: Request) {
                 user_id: instance.organization_id,
                 organization_id: instance.organization_id,
                 status: 'ai',
-                start_time: new Date(body.messageTimestamp * 1000).toISOString()
+                start_time: new Date().toISOString()
               })
               .select()
               .single();
@@ -155,8 +155,24 @@ export async function POST(req: Request) {
           }
         }
 
-        // Salvar mensagem recebida
+        // Salvar mensagem recebida (verificar duplicatas primeiro)
         if (conversationId) {
+          // Verificar se a mensagem já existe (usando ID único do WhatsApp)
+          const messageId = body.key.id;
+          const { data: existingMessage } = await supabase
+            .from("messages")
+            .select("id")
+            .eq("conversation_id", conversationId)
+            .eq("content", messageText)
+            .eq("sender", 'contact')
+            .gte("created_at", new Date(Date.now() - 60000).toISOString()) // 1 minuto de tolerância
+            .single();
+
+          if (existingMessage) {
+            console.log('⏭️ Mensagem já existe, pulando duplicata:', messageId);
+            return NextResponse.json({ success: true, message: 'Mensagem duplicada ignorada' });
+          }
+
           const { error: messageError } = await supabase
             .from("messages")
             .insert({
@@ -164,7 +180,7 @@ export async function POST(req: Request) {
               sender: 'contact',
               content: messageText,
               organization_id: instance.organization_id,
-              created_at: new Date(body.messageTimestamp * 1000).toISOString()
+              created_at: new Date().toISOString()
             });
 
           if (messageError) {

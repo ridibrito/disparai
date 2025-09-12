@@ -61,19 +61,22 @@ export async function POST(
 
     // Enviar confirmação de leitura via Mega API
     try {
+      const jid = `${conversation.contacts.phone}@s.whatsapp.net`;
       const megaApiPayload = {
-        instance_key: 'coruss-whatsapp-01', // Usar a instância configurada
-        remoteJid: conversation.contacts.phone,
-        messageId: 'read_receipt' // ID genérico para confirmação de leitura
+        jid: jid
       };
       
       console.log('📤 Enviando confirmação de leitura para Mega API:', megaApiPayload);
+      console.log('📤 JID construído:', jid);
+      console.log('📤 Phone do contato:', conversation.contacts.phone);
+      console.log('🔗 URL da Mega API:', `${env.megaApi.host}/rest/chat/coruss-whatsapp-01/readChat`);
+      console.log('🔑 Token da Mega API:', env.megaApi.token ? 'Presente' : 'Ausente');
       
-      const megaApiResponse = await fetch(`${env.mega.host}/message/read`, {
+      const megaApiResponse = await fetch(`${env.megaApi.host}/rest/chat/coruss-whatsapp-01/readChat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${env.mega.token}`,
+          'Authorization': `Bearer ${env.megaApi.token}`,
         },
         body: JSON.stringify(megaApiPayload)
       });

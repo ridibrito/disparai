@@ -6,7 +6,9 @@ import { Settings, Home, Users, MessageSquare, Zap, FileText } from 'lucide-reac
 import { SidebarToggle } from '@/components/dashboard/sidebar-toggle';
 import { UserDropdown } from '@/components/ui/user-dropdown';
 import { SidebarLink } from '@/components/dashboard/sidebar-link';
+import { NotificationBell } from '@/components/ui/notification-bell';
 import { DashboardClientWrapper } from '@/components/dashboard/dashboard-client-wrapper';
+import { GlobalNotificationHeader } from '@/components/dashboard/global-notification-header';
 
 export default async function DashboardLayout({
   children,
@@ -60,7 +62,8 @@ export default async function DashboardLayout({
   
   return (
     <DashboardClientWrapper>
-      <div className="dashboard-layout bg-gray-50">
+      <GlobalNotificationHeader>
+        <div className="dashboard-layout bg-gray-50">
         {/* Sidebar */}
         <div className="dashboard-sidebar">
           <div className="flex flex-col h-full">
@@ -123,7 +126,8 @@ export default async function DashboardLayout({
         <div className="dashboard-main">
           {/* Fixed Header */}
           <header className="dashboard-header">
-            <div className="flex items-center justify-end h-16 px-6">
+            <div className="flex items-center justify-end h-16 px-6 gap-4">
+              <NotificationBell />
               <UserDropdown 
                 userName={userName}
                 userInitial={userName?.charAt(0).toUpperCase()}
@@ -139,6 +143,7 @@ export default async function DashboardLayout({
           </main>
         </div>
       </div>
+      </GlobalNotificationHeader>
     </DashboardClientWrapper>
   );
 }

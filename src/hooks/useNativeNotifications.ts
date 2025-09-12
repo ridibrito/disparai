@@ -22,6 +22,9 @@ export function useNativeNotifications({ onNotificationClick }: UseNativeNotific
     if ('Notification' in window) {
       setIsSupported(true);
       setPermission(Notification.permission);
+      console.log('🔔 Notificações suportadas, permissão:', Notification.permission);
+    } else {
+      console.log('🔔 Notificações não suportadas neste navegador');
     }
   }, []);
 

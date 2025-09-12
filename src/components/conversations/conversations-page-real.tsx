@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Search,
@@ -64,6 +65,7 @@ interface Conversation {
 
 export default function ConversationsPageReal() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -489,6 +491,7 @@ export default function ConversationsPageReal() {
 
   // Função para marcar como lida (declarada antes dos useEffects)
   const handleMarkAsRead = async (conversationId: string) => {
+    console.log('🔍 handleMarkAsRead chamado para:', conversationId);
     try {
       // Marcar como lida localmente
       setConversations(prev => prev.map(conv => 
@@ -496,17 +499,22 @@ export default function ConversationsPageReal() {
           ? { ...conv, unread_count: 0 }
           : conv
       ));
+      console.log('✅ Contador zerado localmente');
       
       // Marcar como lida no hook
       markAsRead(conversationId);
+      console.log('✅ Hook markAsRead chamado');
       
       // Enviar confirmação de leitura via API
+      console.log('📤 Enviando requisição para API mark-read...');
       const response = await fetch(`/api/conversations/${conversationId}/mark-read`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         }
       });
+      
+      console.log('📥 Resposta da API mark-read:', response.status, response.statusText);
 
       if (response.ok) {
         toast.success('Marcado como lido');
@@ -571,14 +579,30 @@ export default function ConversationsPageReal() {
 
   useEffect(() => {
     if (selectedConversation) {
-      fetchMessages(selectedConversation.id);
-      
-      // Marcar como lida automaticamente quando a conversa for selecionada
-      if (selectedConversation.unread_count > 0) {
-        handleMarkAsRead(selectedConversation.id);
+      // Só buscar mensagens se for uma conversa diferente da atual
+      const currentConversationId = messages.length > 0 ? messages[0]?.conversation_id : null;
+      if (currentConversationId !== selectedConversation.id) {
+        fetchMessages(selectedConversation.id);
       }
     }
   }, [selectedConversation]);
+
+  // Selecionar conversa baseada no parâmetro da URL
+  useEffect(() => {
+    const conversationId = searchParams.get('conversation');
+    if (conversationId && conversations.length > 0) {
+      const conversation = conversations.find(conv => conv.id === conversationId);
+      if (conversation && (!selectedConversation || selectedConversation.id !== conversationId)) {
+        console.log('🔗 Selecionando conversa da URL:', conversationId);
+        setSelectedConversation(conversation);
+        
+        // Marcar como lida se tiver mensagens não lidas
+        if (conversation.unread_count > 0) {
+          handleMarkAsRead(conversationId);
+        }
+      }
+    }
+  }, [searchParams, conversations, selectedConversation]);
 
   // Scroll automático para a última mensagem
   useEffect(() => {
@@ -1188,11 +1212,18 @@ export default function ConversationsPageReal() {
                     selectedConversation?.id === conversation.id ? 'bg-green-50 border-r-2 border-green-500' : ''
                   } ${selectedConversations.includes(conversation.id) ? 'bg-blue-50' : ''}`}
                 >
-                  <div onClick={() => {
+                  <div onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
                     if (bulkActionMode) {
                       handleToggleConversationSelection(conversation.id);
                     } else {
                       setSelectedConversation(conversation);
+                      // Marcar como lida se tiver mensagens não lidas
+                      if (conversation.unread_count > 0) {
+                        handleMarkAsRead(conversation.id);
+                      }
                     }
                   }}>
                     <div className="flex items-center space-x-3">
@@ -1475,6 +1506,7 @@ export default function ConversationsPageReal() {
 
       {/* Banner de permissão de notificações */}
       <NotificationPermissionBanner />
+      
     </div>
   );
 }

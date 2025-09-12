@@ -62,10 +62,26 @@ export async function checkMessageLimit(userId: string) {
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
   
+  // Primeiro buscar a organização do usuário
+  const { data: userData } = await supabase
+    .from('users')
+    .select('organization_id')
+    .eq('id', userId)
+    .single();
+
+  if (!userData?.organization_id) {
+    return {
+      allowed: true,
+      current: 0,
+      limit: messageLimit,
+      message: 'Organização não encontrada'
+    };
+  }
+
   const { count } = await supabase
     .from('messages')
     .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
+    .eq('organization_id', userData.organization_id)
     .gte('created_at', firstDayOfMonth)
     .lte('created_at', lastDayOfMonth);
   

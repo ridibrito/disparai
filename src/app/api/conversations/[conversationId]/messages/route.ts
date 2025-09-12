@@ -58,10 +58,16 @@ export async function POST(
   { params }: { params: { conversationId: string } }
 ) {
   console.log('🚀 API messages POST chamada!');
+  console.log('🚀 URL:', request.url);
+  console.log('🚀 Method:', request.method);
   
   try {
     const conversationId = params.conversationId;
+    console.log('🚀 Conversation ID from params:', conversationId);
+    
     const body = await request.json();
+    console.log('🚀 Request body:', body);
+    
     const { content, type = 'text' } = body;
     
     console.log('📤 Enviando mensagem:', { conversationId, content, type });
@@ -69,6 +75,14 @@ export async function POST(
     if (!conversationId || !content) {
       return NextResponse.json({ error: 'ID da conversa e conteúdo são obrigatórios' }, { status: 400 });
     }
+
+    // Debug das variáveis de ambiente
+    console.log('🔍 Debug env:', {
+      supabaseUrl: env.supabase.url ? 'OK' : 'MISSING',
+      supabaseKey: env.supabase.serviceRoleKey ? 'OK' : 'MISSING',
+      megaHost: env.megaApi.host ? 'OK' : 'MISSING',
+      megaToken: env.megaApi.token ? 'OK' : 'MISSING'
+    });
 
     // Cliente admin para operações que precisam contornar RLS
     const supabaseAdmin = createClient(
@@ -132,15 +146,15 @@ export async function POST(
 
     // Enviar mensagem via Mega API
     const megaApiPayload = {
-      instance_key: 'coruss-whatsapp-01',
-      to: conversation.contacts.phone,
-      message: content,
-      type: type
+      messageData: {
+        to: conversation.contacts.phone,
+        text: content
+      }
     };
     
     console.log('📤 Enviando para Mega API:', megaApiPayload);
     
-    const megaApiResponse = await fetch(`${env.megaApi.host}/message/send`, {
+    const megaApiResponse = await fetch(`${env.megaApi.host}/rest/sendMessage/coruss-whatsapp-01/text`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

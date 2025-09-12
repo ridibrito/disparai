@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@/lib/supabaseServer';
+import { GlobalNotificationHeader } from '@/components/dashboard/global-notification-header';
 
 export default async function AuthLayout({
   children,
@@ -12,8 +13,8 @@ export default async function AuthLayout({
     redirect('/dashboard');
   }
   return (
-    <>
+    <GlobalNotificationHeader>
       {children}
-    </>
+    </GlobalNotificationHeader>
   );
 }
