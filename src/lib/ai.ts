@@ -10,6 +10,7 @@ export type AIResult = {
   confidence: number;
   reply?: string;
   handoff?: boolean;
+  handoff_confirmation?: boolean;
   qualification_status?: 'qualified' | 'unqualified' | 'pending';
   tool_calls?: Array<{ function: { name: string; arguments: string } }>;
 };
@@ -184,9 +185,9 @@ export async function runAI(
         qualificationStatus = 'qualified';
         return { intent: 'pricing', confidence: 0.7, reply: text, qualification_status: qualificationStatus };
       }
-      if (/(atendente|humano|falar|pessoa)/.test(low)) {
-        qualificationStatus = 'unqualified'; // Handoff often means AI couldn't qualify
-        return { intent: 'handoff', confidence: 0.9, reply: text, handoff: true, qualification_status: qualificationStatus };
+      if (/(atendente|humano|falar|pessoa|representante|operador|agente|especialista|consultor|vendedor|suporte|ajuda|não consigo|não entendo|complexo|difícil|urgente|emergência)/.test(low)) {
+        qualificationStatus = 'qualified'; // Cliente qualificado que precisa de atendimento humano
+        return { intent: 'handoff_request', confidence: 0.9, handoff: false, qualification_status: qualificationStatus };
       }
       if (/(obrigado|valeu|tchau|sair|parar)/.test(low)) {
         qualificationStatus = 'unqualified'; // User ending conversation without clear qualification
@@ -205,4 +206,39 @@ export async function runAI(
       qualification_status: 'unqualified',
     };
   }
+}
+
+// Função para processar confirmação de transferência
+export async function processHandoffConfirmation(message: string): Promise<AIResult> {
+  const low = message.toLowerCase().trim();
+  
+  // Detectar confirmação positiva
+  if (/(sim|confirmo|quero|preciso|pode|pode ser|ok|tudo bem|perfeito|ótimo|exato|correto|isso mesmo|transferir|atendente|humano)/.test(low)) {
+    return {
+      intent: 'handoff_confirmed',
+      confidence: 0.9,
+      handoff: true,
+      qualification_status: 'qualified'
+    };
+  }
+  
+  // Detectar recusa
+  if (/(não|não quero|não preciso|cancelar|desistir|deixa|esquece|não é necessário|continuar|ia|bot)/.test(low)) {
+    return {
+      intent: 'handoff_cancelled',
+      confidence: 0.9,
+      handoff: false,
+      qualification_status: 'qualified',
+      reply: 'Perfeito! Continuo aqui para te ajudar. Como posso te auxiliar?'
+    };
+  }
+  
+  // Resposta neutra - pedir esclarecimento
+  return {
+    intent: 'handoff_clarification',
+    confidence: 0.5,
+    handoff: false,
+    qualification_status: 'qualified',
+    reply: 'Para confirmar, você gostaria de falar com um atendente humano?'
+  };
 }

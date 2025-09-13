@@ -38,6 +38,14 @@ export default async function PerfilPage() {
   const userRole = memberData?.role;
   const canEditCompany = userRole === 'owner' || userRole === 'admin';
 
+  console.log('=== DEBUG PERFIL PAGE ===');
+  console.log('User ID:', userId);
+  console.log('Organization:', organization);
+  console.log('Member data:', memberData);
+  console.log('User role:', userRole);
+  console.log('Can edit company:', canEditCompany);
+  console.log('========================');
+
   return (
     <div className="space-y-6">
       {/* Page Header */}

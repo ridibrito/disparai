@@ -62,6 +62,50 @@ export async function POST(req: NextRequest) {
               m.interactive?.list_reply?.title ||
               m.interactive?.button_reply?.title ||
               '';
+            
+            // Processar resposta de botão de confirmação
+            const buttonId = m.interactive?.button_reply?.id;
+            if (buttonId === 'confirm_handoff' || buttonId === 'cancel_handoff') {
+              // Processar confirmação de transferência
+              const { processHandoffConfirmation } = await import('@/lib/ai');
+              const confirmationResult = await processHandoffConfirmation(
+                buttonId === 'confirm_handoff' ? 'sim' : 'não'
+              );
+              
+              if (confirmationResult.handoff) {
+                // Transferir para humano
+                await supabaseAdmin
+                  .from('conversations')
+                  .update({
+                    attendance_type: 'transferred',
+                    attendance_status: 'pending',
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', conv.id);
+                
+                await sendText(
+                  e164,
+                  '✅ Perfeito! Sua conversa foi transferida para um atendente humano. Em breve você será atendido por um de nossos especialistas.',
+                  connection.user_id,
+                  connection.type
+                );
+                
+                // Disparar notificação
+                console.log('🔔 Notificação: Conversa transferida para humano', {
+                  conversationId: conv.id,
+                  contactPhone: e164
+                });
+              } else {
+                // Continuar com IA
+                await sendText(
+                  e164,
+                  confirmationResult.reply || 'Perfeito! Continuo aqui para te ajudar. Como posso te auxiliar?',
+                  connection.user_id,
+                  connection.type
+                );
+              }
+              continue;
+            }
 
             // Opt-out
             if (/(sair|stop|cancelar)/i.test(text)) {
@@ -97,7 +141,66 @@ export async function POST(req: NextRequest) {
                 .eq('id', contact.id);
             }
 
-            if (aiResult.reply) {
+            // Processar intenção de transferência
+            if (aiResult.intent === 'handoff_request') {
+              // Enviar mensagem de confirmação com botões
+              try {
+                const { sendInteractive } = await import('@/lib/whatsapp');
+                const res = await sendInteractive(
+                  e164,
+                  'Entendi que você gostaria de falar com um atendente humano. Posso transferir sua conversa agora?',
+                  [
+                    { id: 'confirm_handoff', title: 'Sim, transferir' },
+                    { id: 'cancel_handoff', title: 'Não, continuar com IA' }
+                  ],
+                  connection.user_id,
+                  connection.type
+                );
+                
+                await persistOutgoingMessage(
+                  conv.id,
+                  'interactive',
+                  { 
+                    type: 'button',
+                    body: 'Entendi que você gostaria de falar com um atendente humano. Posso transferir sua conversa agora?',
+                    buttons: [
+                      { id: 'confirm_handoff', title: 'Sim, transferir' },
+                      { id: 'cancel_handoff', title: 'Não, continuar com IA' }
+                    ]
+                  },
+                  res?.messages?.[0]?.id
+                );
+
+                // Log do envio bem-sucedido
+                await logConnectionUsage(
+                  connection.id,
+                  'send_message',
+                  true,
+                  1,
+                  null,
+                  { message_type: 'interactive', recipient: e164 }
+                );
+              } catch (error: any) {
+                console.error('Erro ao enviar botões de confirmação:', error);
+                // Fallback para texto simples
+                const res = await sendText(e164, 'Entendi que você gostaria de falar com um atendente humano. Posso transferir sua conversa? Responda "sim" para confirmar.', connection.user_id, connection.type);
+                await persistOutgoingMessage(
+                  conv.id,
+                  'text',
+                  { body: 'Entendi que você gostaria de falar com um atendente humano. Posso transferir sua conversa? Responda "sim" para confirmar.' },
+                  res?.messages?.[0]?.id
+                );
+                
+                await logConnectionUsage(
+                  connection.id,
+                  'send_message',
+                  true,
+                  1,
+                  null,
+                  { message_type: 'text', recipient: e164 }
+                );
+              }
+            } else if (aiResult.reply) {
               try {
                 const res = await sendText(e164, aiResult.reply, connection.user_id, connection.type);
                 await persistOutgoingMessage(

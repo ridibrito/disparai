@@ -232,6 +232,39 @@ export class DisparaiAPIClient {
   }
 
   /**
+   * Enviar mensagem com botões interativos
+   */
+  async sendButtonMessage(
+    to: string,
+    body: string,
+    buttons: Array<{ id: string; title: string }>
+  ): Promise<DisparaiAPIResponse> {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/rest/sendMessage/${this.config.instanceKey}/buttonMessage`,
+        {
+          messageData: {
+            to,
+            body,
+            buttons: buttons.map(button => ({
+              buttonId: button.id,
+              buttonText: button.title
+            }))
+          }
+        },
+        { headers: this.getHeaders() }
+      );
+      return response.data;
+    } catch (error: any) {
+      return {
+        error: true,
+        message: error.response?.data?.message || error.message,
+        data: error.response?.data
+      };
+    }
+  }
+
+  /**
    * Download de mídia recebida via webhook
    * NOTA: Este endpoint pode não estar disponível na documentação oficial
    */
@@ -528,6 +561,30 @@ export class DisparaiAPIClient {
       const response = await axios.get(
         `${this.baseUrl}/rest/contacts/${this.config.instanceKey}`,
         { headers: this.getHeaders() }
+      );
+      return response.data;
+    } catch (error: any) {
+      return {
+        error: true,
+        message: error.response?.data?.message || error.message,
+        data: error.response?.data
+      };
+    }
+  }
+
+  /**
+   * Buscar foto de perfil de um contato
+   */
+  async getProfilePicture(phoneNumber: string): Promise<DisparaiAPIResponse> {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/rest/instance/getProfilePicture/${phoneNumber}`,
+        { 
+          headers: this.getHeaders(),
+          params: {
+            instance_key: this.config.instanceKey
+          }
+        }
       );
       return response.data;
     } catch (error: any) {

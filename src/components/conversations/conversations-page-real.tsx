@@ -32,6 +32,7 @@ import { useTemplates } from '@/hooks/useTemplates';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { useGlobalNotifications } from '@/hooks/useGlobalNotifications';
 import { useAuth } from '@/contexts/AuthContext';
+import { useContactAvatar } from '@/hooks/useContactAvatar';
 
 interface Contact {
   id: string;
@@ -91,18 +92,52 @@ export default function ConversationsPageReal() {
   const [showTemplateSuggestions, setShowTemplateSuggestions] = useState(false);
   const [templateSuggestions, setTemplateSuggestions] = useState<any[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
-  const [activeTab, setActiveTab] = useState<'human' | 'ai_history'>('human');
+  const [activeTab, setActiveTab] = useState<'ai_active' | 'human'>('ai_active');
+  const [aiFilter, setAiFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [humanFilter, setHumanFilter] = useState<'unanswered' | 'in_progress' | 'completed'>('unanswered');
-  const [aiFilter, setAiFilter] = useState<'all' | 'pending' | 'completed' | 'transferred'>('all');
 
   // Função para filtrar conversas baseado na aba ativa
   const getFilteredConversations = () => {
     let filtered = conversations;
 
-    if (activeTab === 'human') {
-      // Filtrar conversas de atendimento humano
+    console.log('=== DEBUG FILTROS ===');
+    console.log('Active tab:', activeTab);
+    console.log('Total conversations:', conversations.length);
+    console.log('Conversations data:', conversations.map(c => ({
+      id: c.id,
+      name: c.contacts.name,
+      attendance_type: c.attendance_type,
+      attendance_status: c.attendance_status
+    })));
+
+    if (activeTab === 'ai_active') {
+      // Filtrar conversas ativas com IA (não transferidas)
       filtered = conversations.filter(conv => 
-        conv.attendance_type === 'human' || conv.attendance_type === 'transferred'
+        conv.attendance_type === 'ai' && conv.attendance_status !== 'transferred'
+      );
+      
+      console.log('AI Active filtered:', filtered.length);
+      console.log('AI Active conversations:', filtered.map(c => ({
+        id: c.id,
+        name: c.contacts.name,
+        attendance_type: c.attendance_type,
+        attendance_status: c.attendance_status
+      })));
+
+      // Aplicar filtros específicos da IA ativa
+      switch (aiFilter) {
+        case 'pending':
+          filtered = filtered.filter(conv => conv.attendance_status === 'pending');
+          break;
+        case 'completed':
+          filtered = filtered.filter(conv => conv.attendance_status === 'completed');
+          break;
+        // 'all' não precisa de filtro adicional
+      }
+    } else if (activeTab === 'human') {
+      // Filtrar conversas de atendimento humano (transferidas)
+      filtered = conversations.filter(conv => 
+        conv.attendance_type === 'transferred' || conv.attendance_type === 'human'
       );
 
       // Aplicar filtros específicos do atendimento humano
@@ -116,23 +151,6 @@ export default function ConversationsPageReal() {
         case 'completed':
           filtered = filtered.filter(conv => conv.attendance_status === 'completed');
           break;
-      }
-    } else {
-      // Filtrar conversas de IA
-      filtered = conversations.filter(conv => conv.attendance_type === 'ai');
-
-      // Aplicar filtros específicos do histórico de IA
-      switch (aiFilter) {
-        case 'pending':
-          filtered = filtered.filter(conv => conv.attendance_status === 'pending');
-          break;
-        case 'completed':
-          filtered = filtered.filter(conv => conv.attendance_status === 'completed');
-          break;
-        case 'transferred':
-          filtered = filtered.filter(conv => conv.attendance_status === 'transferred');
-          break;
-        // 'all' não precisa de filtro adicional
       }
     }
 
@@ -180,7 +198,7 @@ export default function ConversationsPageReal() {
     try {
       // Aqui você faria a chamada para a API para atualizar o status
       // Por enquanto, vamos simular a atualização local
-      setConversations(prev => prev.map(conv => 
+      const updatedConversations = conversations.map(conv => 
         conv.id === conversationId 
           ? { 
               ...conv, 
@@ -188,7 +206,28 @@ export default function ConversationsPageReal() {
               attendance_status: 'pending' as const
             }
           : conv
-      ));
+      );
+      
+      setConversations(updatedConversations);
+      
+      // Enviar notificação quando transferir para humano
+      const transferredConversation = updatedConversations.find(conv => conv.id === conversationId);
+      if (transferredConversation) {
+        console.log('🔔 Notificação: Conversa transferida para atendimento humano', {
+          conversationId,
+          contactName: transferredConversation.contacts.name,
+          lastMessage: transferredConversation.last_message_content
+        });
+        
+        // Disparar evento customizado para notificação
+        const event = new CustomEvent('conversationTransferredToHuman', {
+          detail: {
+            conversation: transferredConversation,
+            message: 'Conversa transferida para atendimento humano'
+          }
+        });
+        window.dispatchEvent(event);
+      }
       
       toast.success('Conversa transferida para atendimento humano');
     } catch (error) {
@@ -271,10 +310,29 @@ export default function ConversationsPageReal() {
       }
     },
     onNewConversation: (conversation) => {
-      // Adicionar nova conversa à lista
-      setConversations(prev => [conversation, ...prev]);
+      // Adicionar nova conversa à lista com campos padrão
+      const newConversation = {
+        ...conversation,
+        attendance_type: conversation.attendance_type || 'ai',
+        attendance_status: conversation.attendance_status || 'pending',
+        unread_count: conversation.unread_count || 0,
+        has_attachments: conversation.has_attachments || false,
+        is_archived: conversation.is_archived || false,
+        is_favorite: conversation.is_favorite || false,
+      };
+      setConversations(prev => [newConversation, ...prev]);
     }
   });
+
+  // Hook para buscar avatar do contato selecionado
+  const contactAvatar = useContactAvatar(selectedConversation?.contacts?.phone || '');
+
+  // Buscar avatar quando uma conversa for selecionada
+  useEffect(() => {
+    if (selectedConversation?.contacts?.phone) {
+      contactAvatar.fetchAvatar();
+    }
+  }, [selectedConversation?.contacts?.phone]);
 
   // Função helper para adicionar campos padrão
   const addDefaultFields = (conversations: any[]): Conversation[] => {
@@ -285,8 +343,9 @@ export default function ConversationsPageReal() {
       is_archived: conv.is_archived || false,
       is_favorite: conv.is_favorite || false,
       // Adicionar campos de atendimento com valores padrão
-      attendance_type: conv.attendance_type || (Math.random() > 0.5 ? 'ai' : 'human'),
-      attendance_status: conv.attendance_status || (Math.random() > 0.7 ? 'completed' : 'pending'),
+      // Por padrão, novas conversas começam com IA
+      attendance_type: conv.attendance_type || 'ai',
+      attendance_status: conv.attendance_status || 'pending',
     }));
   };
 
@@ -670,6 +729,7 @@ export default function ConversationsPageReal() {
   const fetchConversations = async () => {
     try {
       setLoadingConversations(true);
+      console.log('🔄 Buscando conversas da API...');
       
       const response = await fetch('/api/conversations');
       if (!response.ok) {
@@ -677,12 +737,15 @@ export default function ConversationsPageReal() {
       }
       
       const data = await response.json();
+      console.log('✅ Dados da API recebidos:', data);
       setConversations(data.conversations || []);
     } catch (error) {
-      console.error('Erro ao carregar conversas:', error);
+      console.error('❌ Erro ao carregar conversas:', error);
+      console.log('🔄 Usando dados mock como fallback...');
       toast.error('Erro ao carregar conversas');
       // Fallback para dados mock em caso de erro
       setConversations(mockConversations);
+      console.log('✅ Dados mock carregados:', mockConversations.length, 'conversas');
     } finally {
       setLoadingConversations(false);
     }
@@ -1132,47 +1195,60 @@ export default function ConversationsPageReal() {
   return (
     <div className="full-bleed-chat bg-white">
       {/* Sidebar - Lista de Conversas */}
-      <div className="w-96 border-r border-gray-200 bg-white flex flex-col">
+      <div className="w-[500px] border-r border-gray-200 bg-white flex flex-col">
         {/* Header da sidebar */}
         <div className="flex-shrink-0 bg-gray-50 border-b border-gray-200">
           <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold text-gray-900">Conversas</h1>
-            {unreadCount > 0 && (
-              <span className="bg-green-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
-                {unreadCount}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            <button 
-              onClick={() => setShowNewConversationModal(true)}
-              className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors"
-            >
-              <Plus className="h-5 w-5" />
-            </button>
-            <button 
-              onClick={() => fetchConversations()}
-              className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors"
-            >
-              <RefreshCw className="h-5 w-5" />
-            </button>
-            <button 
-              onClick={() => setBulkActionMode(!bulkActionMode)}
-              className={`p-2 rounded-full transition-colors ${
-                bulkActionMode 
-                  ? 'text-green-600 bg-green-100 hover:bg-green-200' 
-                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-200'
-              }`}
-            >
-              <MoreVertical className="h-5 w-5" />
-            </button>
-          </div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900">Conversas</h1>
+              {unreadCount > 0 && (
+                <span className="bg-green-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
+                  {unreadCount}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <button 
+                onClick={() => setShowNewConversationModal(true)}
+                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors"
+                title="Nova conversa"
+              >
+                <Plus className="h-5 w-5" />
+              </button>
+              <button 
+                onClick={() => fetchConversations()}
+                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors"
+                title="Atualizar"
+              >
+                <RefreshCw className="h-5 w-5" />
+              </button>
+              <button 
+                onClick={() => setBulkActionMode(!bulkActionMode)}
+                className={`p-2 rounded-full transition-colors ${
+                  bulkActionMode 
+                    ? 'text-green-600 bg-green-100 hover:bg-green-200' 
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-200'
+                }`}
+                title="Ações em lote"
+              >
+                <MoreVertical className="h-5 w-5" />
+              </button>
+            </div>
           </div>
           
           {/* Abas */}
           <div className="px-4">
             <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('ai_active')}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'ai_active'
+                    ? 'border-green-500 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                1. Falando com a IA
+              </button>
               <button
                 onClick={() => setActiveTab('human')}
                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -1181,72 +1257,29 @@ export default function ConversationsPageReal() {
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                1. Atendimento humano
-              </button>
-              <button
-                onClick={() => setActiveTab('ai_history')}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'ai_history'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                2. Histórico de conversas
+                2. Atendimento Humano
               </button>
             </div>
           </div>
         </div>
 
         {/* Barra de pesquisa */}
-        <div className="flex-shrink-0 p-2 bg-white border-b border-gray-200">
+        <div className="flex-shrink-0 p-4 bg-white border-b border-gray-200">
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text"
               placeholder="Pesquisar ou começar uma nova conversa"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
             />
           </div>
         </div>
 
         {/* Filtros por aba */}
         <div className="px-3 py-2 border-b border-gray-200 bg-gray-50">
-          {activeTab === 'human' ? (
-            <div className="flex items-center space-x-2">
-              <button 
-                onClick={() => setHumanFilter('unanswered')}
-                className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                  humanFilter === 'unanswered'
-                    ? 'bg-green-100 text-green-700 border border-green-300'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Não respondidas
-              </button>
-              <button 
-                onClick={() => setHumanFilter('in_progress')}
-                className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                  humanFilter === 'in_progress'
-                    ? 'bg-green-100 text-green-700 border border-green-300'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Em Andamento
-              </button>
-              <button 
-                onClick={() => setHumanFilter('completed')}
-                className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                  humanFilter === 'completed'
-                    ? 'bg-green-100 text-green-700 border border-green-300'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Finalizadas
-              </button>
-            </div>
-          ) : (
+          {activeTab === 'ai_active' ? (
             <div className="flex items-center space-x-2">
               <button 
                 onClick={() => setAiFilter('all')}
@@ -1278,15 +1311,38 @@ export default function ConversationsPageReal() {
               >
                 Concluídas
               </button>
+            </div>
+          ) : (
+            <div className="flex items-center space-x-2">
               <button 
-                onClick={() => setAiFilter('transferred')}
+                onClick={() => setHumanFilter('unanswered')}
                 className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                  aiFilter === 'transferred'
+                  humanFilter === 'unanswered'
                     ? 'bg-green-100 text-green-700 border border-green-300'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
-                Transferidas
+                Não respondidas
+              </button>
+              <button 
+                onClick={() => setHumanFilter('in_progress')}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                  humanFilter === 'in_progress'
+                    ? 'bg-green-100 text-green-700 border border-green-300'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Em Andamento
+              </button>
+              <button 
+                onClick={() => setHumanFilter('completed')}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                  humanFilter === 'completed'
+                    ? 'bg-green-100 text-green-700 border border-green-300'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Finalizadas
               </button>
             </div>
           )}
@@ -1341,8 +1397,8 @@ export default function ConversationsPageReal() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
             </div>
           ) : filteredConversations.length === 0 ? (
-            <div className="text-center text-gray-500 py-8">
-              {searchTerm ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa ainda'}
+            <div className="text-center text-gray-400 py-8 text-sm">
+              {searchTerm ? 'Nenhuma conversa encontrada' : ''}
             </div>
           ) : (
             <div className="space-y-1">
@@ -1390,7 +1446,7 @@ export default function ConversationsPageReal() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-1">
-                          <h3 className="text-sm font-semibold text-gray-900 truncate">
+                          <h3 className="text-base font-[400px] text-gray-900 truncate" style={{ fontSize: '16px' }}>
                             {conversation.contacts.name}
                           </h3>
                           {conversation.has_attachments && (
@@ -1454,7 +1510,7 @@ export default function ConversationsPageReal() {
                       )}
 
                       {/* Botão de transferir para humano - apenas para conversas de IA */}
-                      {activeTab === 'ai_history' && conversation.attendance_type === 'ai' && (
+                      {activeTab === 'ai_active' && conversation.attendance_type === 'ai' && (
                         <button
                           onClick={() => {
                             transferToHuman(conversation.id);
@@ -1504,13 +1560,22 @@ export default function ConversationsPageReal() {
             {/* Header da conversa */}
             <div className="flex-shrink-0 h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-                  <span className="text-sm font-medium text-gray-700">
-                    {getInitial(selectedConversation.contacts.name)}
-                  </span>
+                <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center overflow-hidden">
+                  {contactAvatar.avatarUrl ? (
+                    <img 
+                      src={contactAvatar.avatarUrl} 
+                      alt={selectedConversation.contacts.name}
+                      className="w-full h-full object-cover"
+                      onError={() => contactAvatar.refetch()}
+                    />
+                  ) : (
+                    <span className="text-sm font-medium text-gray-700">
+                      {getInitial(selectedConversation.contacts.name)}
+                    </span>
+                  )}
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">
+                  <h2 className="font-semibold text-gray-900" style={{ fontSize: '16px' }}>
                     {selectedConversation.contacts.name}
                   </h2>
                   <p className="text-sm text-gray-500">
@@ -1529,38 +1594,45 @@ export default function ConversationsPageReal() {
             </div>
 
             {/* Messages Area */}
-            <div className="messages-container flex-1 overflow-y-auto p-4 space-y-4 relative bg-gray-100">
+            <div 
+              className="messages-container flex-1 overflow-y-auto px-4 py-2 relative"
+              style={{
+                backgroundColor: '#F5F1EB',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='zap-pattern' patternUnits='userSpaceOnUse' width='40' height='40'%3E%3Crect width='40' height='40' fill='%23F5F1EB'/%3E%3Cg fill='%23D4C4B0' opacity='0.6'%3E%3Cpath d='M10 8L16 14L10 20L16 14L22 8L16 14L22 20L16 14L22 8L16 14L10 8Z'/%3E%3Cpath d='M30 24L36 30L30 36L36 30L42 24L36 30L42 36L36 30L42 24L36 30L30 24Z'/%3E%3Cpath d='M2 26L8 32L2 38L8 32L14 26L8 32L14 38L8 32L14 26L8 32L2 26Z'/%3E%3C/g%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100%25' height='100%25' fill='url(%23zap-pattern)'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'repeat'
+              }}
+            >
               <div className="relative z-10 pb-4">
                 {loadingMessages ? (
                   <div className="text-center text-gray-500 py-8">Carregando mensagens...</div>
                 ) : messages.length === 0 ? (
-                  <div className="text-center text-gray-500 py-8">Nenhuma mensagem ainda</div>
+                  <div className="text-center text-gray-400 py-8 text-sm">Nenhuma mensagem ainda</div>
                 ) : (
                   messages.map((message) => (
                     <div
                       key={message.id}
-                      className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'} mb-1`}
+                      className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'} mb-0.5`}
                     >
                       <div
-                        className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg ${
+                        className={`max-w-xs lg:max-w-md px-3 py-2 rounded-lg shadow-sm ${
                           message.sender === 'user'
-                            ? 'bg-green-500 text-white'
-                            : 'bg-white text-gray-900 border border-gray-200'
+                            ? 'bg-[#dcf8c6] text-gray-900 ml-12'
+                            : 'bg-white text-gray-900 mr-12'
                         }`}
                       >
-                        <p className="text-sm">{message.content}</p>
+                        <p className="text-sm" style={{ fontSize: '14.2px' }}>{message.content}</p>
                         <div className={`flex items-center justify-between mt-1 ${
-                          message.sender === 'user' ? 'text-green-100' : 'text-gray-500'
+                          message.sender === 'user' ? 'text-gray-500' : 'text-gray-500'
                         }`}>
                           <span className="text-xs">
                             {formatTime(message.created_at)}
                           </span>
                           {message.sender === 'user' && (
                             <div className="flex items-center space-x-1">
-                              {message.status === 'sent' && <Check className="w-3 h-3" />}
-                              {message.status === 'delivered' && <CheckCheck className="w-3 h-3" />}
-                              {message.status === 'read' && <CheckCheck className="w-3 h-3 text-blue-300" />}
-                              {message.status === 'failed' && <AlertCircle className="w-3 h-3 text-red-400" />}
+                              {message.status === 'sent' && <Check className="w-3 h-3 text-gray-400" />}
+                              {message.status === 'delivered' && <CheckCheck className="w-3 h-3 text-gray-400" />}
+                              {message.status === 'read' && <CheckCheck className="w-3 h-3 text-blue-500" />}
+                              {message.status === 'failed' && <AlertCircle className="w-3 h-3 text-red-500" />}
                             </div>
                           )}
                         </div>
@@ -1572,11 +1644,14 @@ export default function ConversationsPageReal() {
             </div>
 
             {/* Message Input */}
-            <div className="flex-shrink-0 px-4 py-4 bg-white border-t border-gray-200">
-              <div className="flex items-center space-x-3">
+            <div 
+              className="flex-shrink-0 px-4 py-3 border-t border-gray-200"
+              style={{ backgroundColor: '#F5F1EB' }}
+            >
+              <div className="flex items-center space-x-2">
                 <button 
                   onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors"
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
                   title="Emojis"
                 >
                   <Smile className="h-5 w-5" />
@@ -1595,27 +1670,27 @@ export default function ConversationsPageReal() {
                 />
                 <label
                   htmlFor="media-input"
-                  className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors cursor-pointer"
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer"
                 >
                   <Paperclip className="h-5 w-5" />
                 </label>
                 <div className="flex-1">
                   <input
                     type="text"
-                    placeholder="Digite sua mensagem... (digite / para ver templates)"
+                    placeholder="Digite uma mensagem"
                     value={newMessage}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-full focus:outline-none focus:border-gray-300 text-sm"
                   />
                 </div>
                 <button
                   onClick={handleSendMessage}
                   disabled={!newMessage.trim() || sendingMessage}
-                  className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {sendingMessage ? (
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-500"></div>
                   ) : (
                     <Send className="h-5 w-5" />
                   )}

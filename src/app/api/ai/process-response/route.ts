@@ -164,14 +164,51 @@ export async function POST(request: NextRequest) {
       console.error('Erro ao salvar resposta do agente:', saveError);
     }
 
-    // 8. Se deve escalar para humano, marcar conversa
+    // 8. Se deve escalar para humano, enviar confirmação com botões
     if (aiResponse.should_escalate) {
       console.log('⚠️ Escalando para humano:', aiResponse.escalation_reason);
       
-      // TODO: Implementar lógica de escalação
-      // - Marcar conversa como "precisa de atenção humana"
-      // - Notificar equipe
-      // - Adicionar à fila de atendimento
+      try {
+        // Enviar mensagem de confirmação com botões
+        const whatsappResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_APP_URL}/api/conversations/${conversationId}/send-interactive`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              body: 'Entendi que você gostaria de falar com um atendente humano. Posso transferir sua conversa agora?',
+              buttons: [
+                { id: 'confirm_handoff', title: 'Sim, transferir' },
+                { id: 'cancel_handoff', title: 'Não, continuar com IA' }
+              ]
+            }),
+          }
+        );
+
+        if (!whatsappResponse.ok) {
+          console.error('Erro ao enviar botões de confirmação');
+          // Fallback para texto simples
+          await fetch(
+            `${process.env.NEXT_PUBLIC_APP_URL}/api/conversations/${conversationId}/messages`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                content: 'Entendi que você gostaria de falar com um atendente humano. Posso transferir sua conversa? Responda "sim" para confirmar.',
+                sender_type: 'system'
+              }),
+            }
+          );
+        } else {
+          console.log('✅ Botões de confirmação enviados com sucesso');
+        }
+      } catch (error) {
+        console.error('Erro ao enviar confirmação de escalação:', error);
+      }
     }
 
     // 9. Enviar resposta via WhatsApp (se não escalar)

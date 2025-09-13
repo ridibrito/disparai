@@ -18,6 +18,8 @@ interface Conversation {
   last_message_content?: string;
   last_message_created_at?: string;
   unread_count: number;
+  attendance_type?: 'human' | 'ai' | 'transferred';
+  attendance_status?: 'pending' | 'in_progress' | 'completed' | 'transferred';
   contacts?: {
     name: string;
     phone: string;
@@ -60,78 +62,100 @@ export function useGlobalNotifications({
   // Callbacks estáveis para evitar reconexões
   const handleNewMessage = useCallback(async (message: Message, conversation: Conversation) => {
     console.log('🔔 handleNewMessage chamado:', { message, conversation });
+    console.log('🔍 Tipo de atendimento:', conversation.attendance_type);
     
-    // Atualizar contador de não lidas
-    setUnreadCount(prev => {
-      const newCount = prev + 1;
-      updateBadge(newCount);
-      updateTitle(newCount);
-      return newCount;
-    });
+    // Só notificar se for atendimento humano (transferred ou human)
+    const shouldNotify = conversation.attendance_type === 'transferred' || conversation.attendance_type === 'human';
+    
+    if (shouldNotify) {
+      console.log('🔔 Enviando notificação - atendimento humano');
+      
+      // Atualizar contador de não lidas
+      setUnreadCount(prev => {
+        const newCount = prev + 1;
+        updateBadge(newCount);
+        updateTitle(newCount);
+        return newCount;
+      });
 
-    // Mostrar notificação nativa
-    console.log('🔔 Disparando notificação nativa...');
-    await showNotification({
-      title: conversation.contacts?.name || 'Contato',
-      body: message.content.length > 50 
-        ? `${message.content.substring(0, 50)}...` 
-        : message.content,
-      icon: '/icone.png',
-      badge: '/icone.png',
-      tag: `conversation-${conversation.id}`,
-      data: {
+      // Mostrar notificação nativa
+      console.log('🔔 Disparando notificação nativa...');
+      await showNotification({
+        title: conversation.contacts?.name || 'Contato',
+        body: message.content.length > 50 
+          ? `${message.content.substring(0, 50)}...` 
+          : message.content,
+        icon: '/icone.png',
+        badge: '/icone.png',
+        tag: `conversation-${conversation.id}`,
+        data: {
+          conversationId: conversation.id,
+          messageId: message.id,
+          contactName: conversation.contacts?.name,
+          contactPhone: conversation.contacts?.phone
+        }
+      });
+      console.log('🔔 Notificação nativa disparada!');
+
+      // Adicionar notificação no sistema de notificações
+      addNotification({
+        type: 'message',
+        title: `Nova mensagem de ${conversation.contacts?.name || 'Contato'}`,
+        message: message.content.length > 100 
+          ? `${message.content.substring(0, 100)}...` 
+          : message.content,
         conversationId: conversation.id,
-        messageId: message.id,
         contactName: conversation.contacts?.name,
         contactPhone: conversation.contacts?.phone
-      }
-    });
-    console.log('🔔 Notificação nativa disparada!');
+      });
+      console.log('🔔 Notificação adicionada ao sistema!');
+    } else {
+      console.log('🔕 Não notificando - atendimento com IA');
+    }
 
-    // Adicionar notificação no sistema de notificações
-    addNotification({
-      type: 'message',
-      title: `Nova mensagem de ${conversation.contacts?.name || 'Contato'}`,
-      message: message.content.length > 100 
-        ? `${message.content.substring(0, 100)}...` 
-        : message.content,
-      conversationId: conversation.id,
-      contactName: conversation.contacts?.name,
-      contactPhone: conversation.contacts?.phone
-    });
-    console.log('🔔 Notificação adicionada ao sistema!');
-
-    // Chamar callback se fornecido
+    // Chamar callback se fornecido (sempre, para atualizar a UI)
     if (onNewMessageRef.current) {
       onNewMessageRef.current(message, conversation);
     }
   }, [showNotification, updateBadge, updateTitle, addNotification]);
 
   const handleNewConversation = useCallback(async (conversation: Conversation) => {
-    // Atualizar contador de não lidas
-    setUnreadCount(prev => {
-      const newCount = prev + 1;
-      updateBadge(newCount);
-      updateTitle(newCount);
-      return newCount;
-    });
+    console.log('🔔 handleNewConversation chamado:', conversation);
+    console.log('🔍 Tipo de atendimento:', conversation.attendance_type);
+    
+    // Só notificar se for atendimento humano (transferred ou human)
+    const shouldNotify = conversation.attendance_type === 'transferred' || conversation.attendance_type === 'human';
+    
+    if (shouldNotify) {
+      console.log('🔔 Enviando notificação - nova conversa com atendimento humano');
+      
+      // Atualizar contador de não lidas
+      setUnreadCount(prev => {
+        const newCount = prev + 1;
+        updateBadge(newCount);
+        updateTitle(newCount);
+        return newCount;
+      });
 
-    // Mostrar notificação nativa
-    await showNotification({
-      title: 'Nova conversa iniciada',
-      body: `Conversa com ${conversation.contacts?.name} (${conversation.contacts?.phone})`,
-      icon: '/icone.png',
-      badge: '/icone.png',
-      tag: `new-conversation-${conversation.id}`,
-      data: {
-        conversationId: conversation.id,
-        contactName: conversation.contacts?.name,
-        contactPhone: conversation.contacts?.phone,
-        isNewConversation: true
-      }
-    });
+      // Mostrar notificação nativa
+      await showNotification({
+        title: 'Nova conversa iniciada',
+        body: `Conversa com ${conversation.contacts?.name} (${conversation.contacts?.phone})`,
+        icon: '/icone.png',
+        badge: '/icone.png',
+        tag: `new-conversation-${conversation.id}`,
+        data: {
+          conversationId: conversation.id,
+          contactName: conversation.contacts?.name,
+          contactPhone: conversation.contacts?.phone,
+          isNewConversation: true
+        }
+      });
+    } else {
+      console.log('🔕 Não notificando - nova conversa com IA');
+    }
 
-    // Chamar callback se fornecido
+    // Chamar callback se fornecido (sempre, para atualizar a UI)
     if (onNewConversationRef.current) {
       onNewConversationRef.current(conversation);
     }

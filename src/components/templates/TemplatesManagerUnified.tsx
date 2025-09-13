@@ -344,15 +344,17 @@ export default function TemplatesManagerUnified() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gerenciar Templates</h1>
-          <p className="text-gray-600">Crie e gerencie templates para diferentes tipos de mensagens</p>
+      <div className="mb-8 mt-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Templates</h1>
+            <p className="text-gray-600">Crie e gerencie templates para diferentes tipos de mensagens</p>
+          </div>
+          <Button onClick={handleNewTemplate} className="bg-green-600 hover:bg-green-700">
+            <Plus className="w-4 h-4 mr-2" />
+            Novo Template
+          </Button>
         </div>
-        <Button onClick={handleNewTemplate} className="bg-green-600 hover:bg-green-700">
-          <Plus className="w-4 h-4 mr-2" />
-          Novo Template
-        </Button>
       </div>
 
       {/* Filtros */}

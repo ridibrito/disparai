@@ -134,6 +134,13 @@ export function ProfileForm({ userId, userEmail, initialData, organizationData, 
   const onSubmit = async (values: ProfileFormValues) => {
     setIsLoading(true);
     
+    console.log('=== DEBUG PROFILE FORM ===');
+    console.log('Active tab:', activeTab);
+    console.log('Can edit company:', canEditCompany);
+    console.log('Organization data:', organizationData);
+    console.log('Form values:', values);
+    console.log('========================');
+    
     try {
       let newAvatarPublicUrl: string | null = null;
       if (pendingAvatarFile) {
@@ -146,13 +153,29 @@ export function ProfileForm({ userId, userEmail, initialData, organizationData, 
         newAvatarPublicUrl = data.publicUrl + `?v=${Date.now()}`;
       }
 
-      // Evita salvar se nada mudou
-      const nothingChanged =
-        values.full_name === lastSaved.full_name &&
-        formatBrazilPhone(values.phone || '') === lastSaved.phone &&
-        (values.bio || '') === (lastSaved.bio || '') &&
-        !pendingAvatarFile;
-      if (nothingChanged) {
+      // Evita salvar se nada mudou (apenas para dados pessoais)
+      const personalDataChanged =
+        values.full_name !== lastSaved.full_name ||
+        formatBrazilPhone(values.phone || '') !== lastSaved.phone ||
+        (values.bio || '') !== (lastSaved.bio || '') ||
+        pendingAvatarFile;
+
+      // Verifica se dados da empresa mudaram (se aplicável)
+      const companyDataChanged = canEditCompany && organizationData ? (
+        values.company_name !== (organizationData.company_name || '') ||
+        values.company_description !== (organizationData.company_description || '') ||
+        values.company_website !== (organizationData.company_website || '') ||
+        values.company_sector !== (organizationData.company_sector || '') ||
+        values.company_phone !== (organizationData.company_phone || '') ||
+        values.company_email !== (organizationData.company_email || '') ||
+        values.company_address !== (organizationData.company_address || '') ||
+        values.company_city !== (organizationData.company_city || '') ||
+        values.company_state !== (organizationData.company_state || '') ||
+        values.company_zip_code !== (organizationData.company_zip_code || '') ||
+        values.company_country !== (organizationData.company_country || 'Brasil')
+      ) : false;
+
+      if (!personalDataChanged && !companyDataChanged) {
         toast.success('Nada para salvar');
         setIsEditingPersonal(false);
         setIsEditingCompany(false);

@@ -34,8 +34,7 @@ export async function GET(request: NextRequest) {
           created_at
         )
       `)
-      .eq('user_id', user.id)
-      .eq('contacts.organization_id', userData.organization_id)
+      .eq('organization_id', userData.organization_id)
       .order('updated_at', { ascending: false });
 
     if (conversationsError) {
@@ -43,7 +42,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao buscar conversas' }, { status: 500 });
     }
 
-    // Buscar última mensagem de cada conversa
+    // Buscar última mensagem e contagem de mensagens não lidas de cada conversa
     const conversationsWithLastMessage = await Promise.all(
       conversations.map(async (conversation) => {
         const { data: lastMessage } = await supabase
@@ -54,10 +53,24 @@ export async function GET(request: NextRequest) {
           .limit(1)
           .single();
 
+        // Contar mensagens do contato (simplificado - todas as mensagens do contato)
+        const { count: unreadCount } = await supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('conversation_id', conversation.id)
+          .eq('sender', 'contact');
+
         return {
           ...conversation,
           contact: conversation.contacts,
           last_message: lastMessage || null,
+          // Adicionar campos de atendimento com valores padrão
+          attendance_type: conversation.status === 'human' ? 'transferred' : 'ai',
+          attendance_status: conversation.status === 'human' ? 'pending' : 'active',
+          unread_count: unreadCount || 0,
+          has_attachments: conversation.has_attachments || false,
+          is_archived: conversation.is_archived || false,
+          is_favorite: conversation.is_favorite || false,
         };
       })
     );

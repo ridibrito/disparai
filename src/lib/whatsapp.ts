@@ -142,6 +142,37 @@ export async function sendInteractive(
   userId?: string,
   connectionType: 'whatsapp_cloud' | 'whatsapp_disparai' = 'whatsapp_cloud'
 ): Promise<WhatsAppResponse> {
+  // Se for MegaAPI/Disparai, usar função específica
+  if (connectionType === 'whatsapp_disparai' && userId) {
+    try {
+      const connection = await getActiveConnection(userId, connectionType);
+      if (connection) {
+        const { createDisparaiAPIClient } = await import('@/lib/disparai-api');
+        const disparaiClient = createDisparaiAPIClient(
+          connection.instance_id,
+          connection.api_token
+        );
+        
+        const result = await disparaiClient.sendButtonMessage(to, body, buttons);
+        
+        if (result.error) {
+          throw new Error(result.message || 'Erro ao enviar botões via MegaAPI');
+        }
+        
+        return {
+          messaging_product: 'whatsapp',
+          contacts: [{ input: to, wa_id: to }],
+          messages: [{ id: result.data?.messageId || 'unknown' }]
+        };
+      }
+    } catch (error) {
+      console.error('Erro ao enviar botões via MegaAPI:', error);
+      // Fallback para texto simples
+      return await sendText(to, `${body}\n\nResponda:\n${buttons.map(b => `• ${b.title}`).join('\n')}`, userId, connectionType);
+    }
+  }
+
+  // WhatsApp Cloud API (formato original)
   let client = whatsappApi; // Cliente padrão para compatibilidade
   
   // Se userId fornecido, usar conexão dinâmica
