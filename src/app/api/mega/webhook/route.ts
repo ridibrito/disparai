@@ -436,6 +436,18 @@ async function processWebhookWithInstance(instanceKey: string, body: any, supaba
                 console.error('❌ Erro ao processar confirmação de transferência:', error);
               }
             } else {
+              // Verificar se a conversa ainda está com IA antes de processar
+              const { data: currentConversation } = await supabase
+                .from('conversations')
+                .select('status')
+                .eq('id', conversationId)
+                .single();
+
+              if (currentConversation?.status === 'human') {
+                console.log('🚫 Conversa já transferida para humano, IA não deve responder');
+                return NextResponse.json({ success: true, message: 'Conversa em atendimento humano, IA não responde' });
+              }
+
               // Processar resposta automática do agente de IA
               try {
                 console.log('🤖 Iniciando processamento de resposta automática...');

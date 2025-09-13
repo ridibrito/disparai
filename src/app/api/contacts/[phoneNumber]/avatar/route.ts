@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase';
-import { createDisparaiAPIClient } from '@/lib/disparai-api';
+import { createClient } from "@supabase/supabase-js";
 
 export async function GET(
   request: NextRequest,
@@ -8,36 +7,28 @@ export async function GET(
 ) {
   try {
     const { phoneNumber } = params;
+    console.log('🔍 Avatar API called for phone:', phoneNumber);
     
     if (!phoneNumber) {
       return NextResponse.json({ error: 'Phone number is required' }, { status: 400 });
     }
 
     // Criar cliente Supabase
-    const supabase = createServerClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
 
     // Buscar usuário autenticado
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Buscar dados do usuário
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     // Buscar conexão ativa do Disparai
     const { data: connection, error: connectionError } = await supabase
       .from('api_connections')
       .select('*')
-      .eq('user_id', user.id)
       .eq('type', 'whatsapp_disparai')
       .eq('is_active', true)
       .eq('status', 'active')
@@ -45,35 +36,43 @@ export async function GET(
       .limit(1)
       .single();
 
+    console.log('🔗 Connection result:', { connection: connection?.id, error: connectionError });
     if (connectionError || !connection) {
       return NextResponse.json({ error: 'No active WhatsApp connection found' }, { status: 404 });
     }
 
-    // Criar cliente Disparai
-    const disparaiClient = createDisparaiAPIClient(
-      connection.instance_id || '',
-      connection.api_key
+    // Buscar avatar diretamente via fetch
+    const host = process.env.MEGA_HOST || 'https://teste8.megaapi.com.br';
+    const token = process.env.MEGA_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs';
+
+    const avatarResponse = await fetch(
+      `${host}/rest/instance/getProfilePicture/${phoneNumber}?instance_key=${connection.instance_id}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
     );
 
-    // Buscar foto de perfil do contato
-    const avatarResult = await disparaiClient.getProfilePicture(phoneNumber);
+    const avatarData = await avatarResponse.json();
+    console.log('📸 Avatar response:', avatarData);
 
-    if (avatarResult.error) {
-      console.error('Error fetching contact avatar:', avatarResult.message);
-      return NextResponse.json({ error: 'Failed to fetch contact avatar' }, { status: 500 });
+    if (!avatarResponse.ok) {
+      return NextResponse.json({ error: 'Failed to fetch avatar' }, { status: 500 });
     }
 
     // Retornar dados do avatar
     return NextResponse.json({
       success: true,
       data: {
-        profilePicture: avatarResult.data?.profilePicture || null,
+        profilePicture: avatarData?.profilePicture || null,
         phoneNumber: phoneNumber
       }
     });
 
   } catch (error) {
-    console.error('Error in avatar API:', error);
+    console.error('❌ Error in avatar API:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -27,7 +27,7 @@ export class DisparaiAPIClient {
 
   constructor(config: DisparaiAPIConfig) {
     this.config = config;
-    this.baseUrl = config.baseUrl || 'https://api.disparai.com';
+    this.baseUrl = config.baseUrl || 'https://teste8.megaapi.com.br';
   }
 
   private getHeaders() {

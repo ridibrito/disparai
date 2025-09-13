@@ -22,7 +22,9 @@ import {
   Image,
   AlertCircle,
   MessageSquare,
-  Send
+  Send,
+  User,
+  RotateCcw
 } from 'lucide-react';
 import { NewConversationModalEnhanced } from './new-conversation-modal-enhanced';
 import { EmojiPicker } from './emoji-picker';
@@ -94,7 +96,7 @@ export default function ConversationsPageReal() {
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<'ai_active' | 'human'>('ai_active');
   const [aiFilter, setAiFilter] = useState<'all' | 'pending' | 'completed'>('all');
-  const [humanFilter, setHumanFilter] = useState<'unanswered' | 'in_progress' | 'completed'>('unanswered');
+  const [humanFilter, setHumanFilter] = useState<'all' | 'unanswered' | 'in_progress' | 'completed'>('in_progress');
 
   // Função para filtrar conversas baseado na aba ativa
   const getFilteredConversations = () => {
@@ -151,6 +153,7 @@ export default function ConversationsPageReal() {
         case 'completed':
           filtered = filtered.filter(conv => conv.attendance_status === 'completed');
           break;
+        // 'all' não precisa de filtro adicional
       }
     }
 
@@ -233,6 +236,44 @@ export default function ConversationsPageReal() {
     } catch (error) {
       console.error('Erro ao transferir conversa:', error);
       toast.error('Erro ao transferir conversa');
+    }
+  };
+
+  // Função para voltar conversa do atendimento humano para IA
+  const transferToAI = async (conversationId: string) => {
+    try {
+      // Chamar API para voltar conversa para IA
+      const response = await fetch(`/api/conversations/${conversationId}/transfer-to-ai`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (response.ok) {
+        // Atualizar conversa local
+        setConversations(prev => prev.map(conv => 
+          conv.id === conversationId 
+            ? { 
+                ...conv, 
+                attendance_type: 'ai', 
+                attendance_status: 'pending',
+                status: 'ai'
+              }
+            : conv
+        ));
+        
+        // Mudar para aba de IA
+        setActiveTab('ai_active');
+        
+        toast.success('Conversa voltou para IA');
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Erro ao voltar conversa para IA');
+      }
+    } catch (error) {
+      console.error('Erro ao voltar conversa para IA:', error);
+      toast.error('Erro ao voltar conversa para IA');
     }
   };
 
@@ -761,6 +802,20 @@ export default function ConversationsPageReal() {
     }
   }, [selectedConversation]);
 
+  // Comportamento SPA: Limpar conversa selecionada quando mudar de aba se ela não pertence à aba atual
+  useEffect(() => {
+    if (selectedConversation) {
+      const filteredConversations = getFilteredConversations();
+      const conversationBelongsToCurrentTab = filteredConversations.some(conv => conv.id === selectedConversation.id);
+      
+      if (!conversationBelongsToCurrentTab) {
+        console.log('🔄 Mudando de aba - conversa selecionada não pertence à aba atual, deselecionando');
+        setSelectedConversation(null);
+        setMessages([]);
+      }
+    }
+  }, [activeTab, conversations]);
+
   // Selecionar conversa baseada no parâmetro da URL
   useEffect(() => {
     const conversationId = searchParams.get('conversation');
@@ -1108,6 +1163,48 @@ export default function ConversationsPageReal() {
     }
   };
 
+  const handleAssumeConversation = async () => {
+    if (!selectedConversation) return;
+    
+    try {
+      // Chamar API para transferir conversa para atendimento humano
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/assume`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (response.ok) {
+        // Atualizar conversa local - marcar como transferida para humano
+        setConversations(prev => prev.map(conv => 
+          conv.id === selectedConversation.id 
+            ? { 
+                ...conv, 
+                attendance_type: 'transferred', 
+                attendance_status: 'in_progress',
+                status: 'human' // Também atualizar o campo status
+              }
+            : conv
+        ));
+        
+        // Mudar para aba de atendimento humano
+        setActiveTab('human');
+        
+        // Garantir que o filtro esteja em 'in_progress' para mostrar a conversa assumida
+        setHumanFilter('in_progress');
+        
+        toast.success('Conversa assumida com sucesso!');
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Erro ao assumir conversa');
+      }
+    } catch (error) {
+      console.error('Erro ao assumir conversa:', error);
+      toast.error('Erro ao assumir conversa');
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation || sendingMessage) return;
     
@@ -1315,6 +1412,16 @@ export default function ConversationsPageReal() {
           ) : (
             <div className="flex items-center space-x-2">
               <button 
+                onClick={() => setHumanFilter('all')}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                  humanFilter === 'all'
+                    ? 'bg-green-100 text-green-700 border border-green-300'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Todas
+              </button>
+              <button 
                 onClick={() => setHumanFilter('unanswered')}
                 className={`px-3 py-1 text-xs rounded-full transition-colors ${
                   humanFilter === 'unanswered'
@@ -1446,7 +1553,7 @@ export default function ConversationsPageReal() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-1">
-                          <h3 className="text-base font-[400px] text-gray-900 truncate" style={{ fontSize: '16px' }}>
+                            <h3 className="text-base font-normal text-gray-900 truncate" style={{ fontSize: '16px' }}>
                             {conversation.contacts.name}
                           </h3>
                           {conversation.has_attachments && (
@@ -1522,6 +1629,20 @@ export default function ConversationsPageReal() {
                           <span>Transferir para humano</span>
                         </button>
                       )}
+
+                      {/* Botão de voltar para IA - apenas para conversas de atendimento humano */}
+                      {activeTab === 'human' && (conversation.attendance_type === 'transferred' || conversation.attendance_type === 'human') && (
+                        <button
+                          onClick={() => {
+                            transferToAI(conversation.id);
+                            setShowConversationMenu(null);
+                          }}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center space-x-2 text-blue-600"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                          <span>Voltar para IA</span>
+                        </button>
+                      )}
                       
                       <button
                         onClick={() => {
@@ -1584,6 +1705,16 @@ export default function ConversationsPageReal() {
                 </div>
               </div>
               <div className="flex items-center space-x-2">
+                {/* Botão de transferir para IA - apenas se estiver na aba de atendimento humano */}
+                {activeTab === 'human' && (selectedConversation.attendance_type === 'transferred' || selectedConversation.attendance_type === 'human') && (
+                  <button 
+                    onClick={() => transferToAI(selectedConversation.id)}
+                    className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full transition-colors"
+                    title="Voltar para IA"
+                  >
+                    <RotateCcw className="h-5 w-5" />
+                  </button>
+                )}
                 <button className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors">
                   <Search className="h-5 w-5" />
                 </button>
@@ -1643,67 +1774,102 @@ export default function ConversationsPageReal() {
               </div>
             </div>
 
-            {/* Message Input */}
-            <div 
-              className="flex-shrink-0 px-4 py-3 border-t border-gray-200"
-              style={{ backgroundColor: '#F5F1EB' }}
-            >
-              <div className="flex items-center space-x-2">
-                <button 
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
-                  title="Emojis"
-                >
-                  <Smile className="h-5 w-5" />
-                </button>
-                <input
-                  type="file"
-                  id="media-input"
-                  accept="image/*,.pdf,.doc,.docx,.txt"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      handleSendMedia(file);
-                    }
-                  }}
-                  className="hidden"
-                />
-                <label
-                  htmlFor="media-input"
-                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer"
-                >
-                  <Paperclip className="h-5 w-5" />
-                </label>
-                <div className="flex-1">
-                  <input
-                    type="text"
-                    placeholder="Digite uma mensagem"
-                    value={newMessage}
-                    onChange={handleInputChange}
-                    onKeyDown={handleKeyDown}
-                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-full focus:outline-none focus:border-gray-300 text-sm"
-                  />
+            {/* Message Input ou Botão Assumir */}
+            {activeTab === 'ai_active' ? (
+              /* Botão Assumir Conversa - Aba IA */
+              <div 
+                className="flex-shrink-0 px-4 py-3 border-t border-gray-200"
+                style={{ backgroundColor: '#F5F1EB' }}
+              >
+                <div className="flex justify-center">
+                  <button
+                    onClick={handleAssumeConversation}
+                    className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-full font-medium transition-colors flex items-center space-x-2"
+                  >
+                    <User className="h-5 w-5" />
+                    <span>Assumir conversa</span>
+                  </button>
                 </div>
-                <button
-                  onClick={handleSendMessage}
-                  disabled={!newMessage.trim() || sendingMessage}
-                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {sendingMessage ? (
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-500"></div>
-                  ) : (
-                    <Send className="h-5 w-5" />
-                  )}
-                </button>
               </div>
-            </div>
+            ) : (
+              /* Input Normal - Aba Atendimento Humano */
+              <div 
+                className="flex-shrink-0 px-4 py-3 border-t border-gray-200"
+                style={{ backgroundColor: '#F5F1EB' }}
+              >
+                <div className="flex items-center space-x-2">
+                  <button 
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+                    title="Emojis"
+                  >
+                    <Smile className="h-5 w-5" />
+                  </button>
+                  <input
+                    type="file"
+                    id="media-input"
+                    accept="image/*,.pdf,.doc,.docx,.txt"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        handleSendMedia(file);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="media-input"
+                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer"
+                  >
+                    <Paperclip className="h-5 w-5" />
+                  </label>
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      placeholder="Digite uma mensagem"
+                      value={newMessage}
+                      onChange={handleInputChange}
+                      onKeyDown={handleKeyDown}
+                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-full focus:outline-none focus:border-gray-300 text-sm"
+                    />
+                  </div>
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={!newMessage.trim() || sendingMessage}
+                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {sendingMessage ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-500"></div>
+                    ) : (
+                      <Send className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center bg-gray-50">
             <div className="text-center">
               <MessageCircle className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Selecione uma conversa</h3>
-              <p className="text-gray-500">Escolha uma conversa da lista para começar a conversar</p>
+              {filteredConversations.length === 0 ? (
+                activeTab === 'ai_active' ? (
+                  <>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhuma conversa com IA no momento</h3>
+                    <p className="text-gray-500">Todas as conversas estão sendo atendidas por humanos</p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhuma conversa de atendimento humano</h3>
+                    <p className="text-gray-500">Todas as conversas estão sendo atendidas pela IA</p>
+                  </>
+                )
+              ) : (
+                <>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Selecione uma conversa</h3>
+                  <p className="text-gray-500">Escolha uma conversa da lista para começar a conversar</p>
+                </>
+              )}
             </div>
           </div>
         )}
