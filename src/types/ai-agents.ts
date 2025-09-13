@@ -8,6 +8,24 @@ export interface AIAgent {
   max_tokens: number;
   temperature: number;
   is_active: boolean;
+  
+  // Configurações avançadas
+  agent_name: string; // Nome que o agente usa
+  initial_message?: string; // Mensagem inicial
+  tone: AgentTone; // Tom de voz
+  language: string; // Idioma
+  timezone: string; // Timezone
+  response_delay_ms: number; // Delay de resposta em ms
+  
+  // Informações da empresa
+  company_name: string;
+  company_sector: string;
+  company_website?: string;
+  company_description: string;
+  
+  // Comportamento padrão
+  default_behavior: string;
+  
   created_at: string;
   updated_at: string;
 }
@@ -60,6 +78,10 @@ export type AgentType =
   | 'qualificacao' 
   | 'followup' 
   | 'custom';
+
+export type AgentTone = 'formal' | 'casual' | 'amigavel' | 'profissional' | 'empolgado' | 'calmo';
+
+export type AgentLanguage = 'pt-BR' | 'en-US' | 'es-ES' | 'fr-FR' | 'de-DE';
 
 export interface EscalationRules {
   // Condições para escalar para humano
@@ -149,6 +171,47 @@ export const AGENT_TYPES: Record<AgentType, { label: string; description: string
     description: 'Agente configurado pelo usuário',
     icon: '⚙️'
   }
+};
+
+export const AGENT_TONES: Record<AgentTone, { label: string; description: string; emoji: string }> = {
+  formal: {
+    label: 'Formal',
+    description: 'Tom respeitoso e profissional',
+    emoji: '👔'
+  },
+  casual: {
+    label: 'Casual',
+    description: 'Tom descontraído e amigável',
+    emoji: '😊'
+  },
+  amigavel: {
+    label: 'Amigável',
+    description: 'Tom caloroso e acolhedor',
+    emoji: '🤗'
+  },
+  profissional: {
+    label: 'Profissional',
+    description: 'Tom competente e confiável',
+    emoji: '💼'
+  },
+  empolgado: {
+    label: 'Empolgado',
+    description: 'Tom entusiasmado e motivador',
+    emoji: '🚀'
+  },
+  calmo: {
+    label: 'Calmo',
+    description: 'Tom sereno e tranquilo',
+    emoji: '🧘'
+  }
+};
+
+export const AGENT_LANGUAGES: Record<AgentLanguage, { label: string; flag: string }> = {
+  'pt-BR': { label: 'Português (Brasil)', flag: '🇧🇷' },
+  'en-US': { label: 'English (US)', flag: '🇺🇸' },
+  'es-ES': { label: 'Español', flag: '🇪🇸' },
+  'fr-FR': { label: 'Français', flag: '🇫🇷' },
+  'de-DE': { label: 'Deutsch', flag: '🇩🇪' }
 };
 
 export const DEFAULT_AGENT_PROMPTS: Record<AgentType, string> = {

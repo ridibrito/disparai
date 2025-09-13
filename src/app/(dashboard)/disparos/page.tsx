@@ -3,8 +3,13 @@ import DisparosPage from '@/components/disparos/DisparosPage';
 
 export default function Disparos() {
   return (
-    <div className="container mx-auto px-4 py-8">
-      <Suspense fallback={<div>Carregando...</div>}>
+    <div className="space-y-6">
+      <Suspense fallback={
+        <div className="mb-8 mt-4">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Disparos</h1>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      }>
         <DisparosPage />
       </Suspense>
     </div>

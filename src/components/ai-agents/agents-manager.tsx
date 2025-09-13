@@ -15,8 +15,10 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Edit, Trash2, Bot, Settings, Activity, AlertTriangle, Loader2, Sparkles } from 'lucide-react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import PromptAssistant from './prompt-assistant';
+import AdvancedAgentCreator from './advanced-agent-creator';
 
 export default function AgentsManager() {
   const { user } = useAuth();
@@ -30,6 +32,7 @@ export default function AgentsManager() {
   const [agentToDelete, setAgentToDelete] = useState<AIAgent | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showPromptAssistant, setShowPromptAssistant] = useState(false);
+  const [showAdvancedCreator, setShowAdvancedCreator] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     type: 'sdr' as AgentType,
@@ -156,17 +159,8 @@ export default function AgentsManager() {
   };
 
   const handleEdit = (agent: AIAgent) => {
-    setEditingAgent(agent);
-    setFormData({
-      name: agent.name,
-      type: agent.type,
-      description: agent.description || '',
-      system_prompt: agent.system_prompt,
-      max_tokens: agent.max_tokens,
-      temperature: agent.temperature,
-      is_active: agent.is_active
-    });
-    setShowForm(true);
+    // Redirecionar para página de edição
+    window.location.href = `/configuracoes/agentes/editar/${agent.id}`;
   };
 
   const handleDeleteClick = (agent: AIAgent) => {
@@ -256,16 +250,12 @@ export default function AgentsManager() {
           <h1 className="text-2xl font-bold text-gray-900">Agentes de IA</h1>
           <p className="text-gray-600">Configure agentes para responder automaticamente às mensagens</p>
         </div>
-        <Button 
-          onClick={() => {
-            console.log('🔘 Botão "Novo Agente" clicado!');
-            setShowForm(true);
-          }}
-          className="bg-green-500 hover:bg-green-600"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Novo Agente
-        </Button>
+        <Link href="/configuracoes/agentes/novo">
+          <Button className="bg-green-500 hover:bg-green-600">
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Agente
+          </Button>
+        </Link>
       </div>
 
       {showForm && (
@@ -475,13 +465,12 @@ export default function AgentsManager() {
             <p className="text-gray-600 mb-4">
               Crie seu primeiro agente de IA para começar a automatizar respostas
             </p>
-            <Button 
-              onClick={() => setShowForm(true)}
-              className="bg-green-500 hover:bg-green-600"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Criar Primeiro Agente
-            </Button>
+            <Link href="/configuracoes/agentes/novo">
+              <Button className="bg-green-500 hover:bg-green-600">
+                <Plus className="h-4 w-4 mr-2" />
+                Criar Primeiro Agente
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       )}
@@ -557,6 +546,18 @@ export default function AgentsManager() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Modal do Criador Avançado */}
+      {showAdvancedCreator && (
+        <AdvancedAgentCreator
+          onClose={() => setShowAdvancedCreator(false)}
+          onSuccess={() => {
+            setShowAdvancedCreator(false);
+            loadAgents();
+          }}
+          editingAgent={editingAgent}
+        />
+      )}
     </div>
   );
 }

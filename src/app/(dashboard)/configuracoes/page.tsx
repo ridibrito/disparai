@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Settings, User, CreditCard, Wifi, Shield, Bot, Users, FileText } from 'lucide-react';
+import { Settings, User, CreditCard, Wifi, Bot, Users, FileText } from 'lucide-react';
 
 export const metadata = {
   title: 'Configurações - disparai',
@@ -28,13 +28,6 @@ export default function ConfiguracoesPage() {
       icon: Wifi,
       href: '/configuracoes/conexao-api',
       color: 'text-purple-500'
-    },
-    {
-      title: 'Segurança',
-      description: 'Configurações de segurança da conta',
-      icon: Shield,
-      href: '/configuracoes/seguranca',
-      color: 'text-red-500'
     },
     {
       title: 'Agentes de IA',

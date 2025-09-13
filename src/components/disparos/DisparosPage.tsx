@@ -21,7 +21,7 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import CreateDisparoModal from './CreateDisparoModal';
 import DisparoDetailsModal from './DisparoDetailsModal';
 import { RealtimeStatsModal } from './RealtimeStatsModal';
@@ -48,6 +48,9 @@ interface Disparo {
 
 export default function DisparosPage() {
   const { user } = useAuth();
+  
+  // Debug: verificar se o usuário está carregado
+  console.log('DisparosPage - User:', user);
   const [disparos, setDisparos] = useState<Disparo[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -124,8 +127,12 @@ export default function DisparosPage() {
   };
 
   useEffect(() => {
+    console.log('DisparosPage - useEffect triggered, user:', user);
     if (user) {
       loadDisparos();
+    } else {
+      console.log('DisparosPage - No user, setting loading to false');
+      setLoading(false);
     }
   }, [user]);
 
@@ -394,12 +401,21 @@ export default function DisparosPage() {
     }
   };
 
+  // Debug: verificar estado
+  console.log('DisparosPage - Render state:', { loading, user: !!user, disparosCount: disparos.length });
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p>Carregando disparos...</p>
+      <div className="space-y-6">
+        <div className="mb-8 mt-4">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Disparos</h1>
+          <p className="text-gray-600">Carregando disparos...</p>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
+            <p>Carregando disparos...</p>
+          </div>
         </div>
       </div>
     );
@@ -408,20 +424,22 @@ export default function DisparosPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <Zap className="w-8 h-8 text-green-600" />
-            Disparos
-          </h1>
-          <p className="text-gray-600 mt-1">
-            Gerencie suas campanhas de mensagens WhatsApp
-          </p>
+      <div className="mb-8 mt-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-2">
+              <Zap className="w-8 h-8 text-green-600" />
+              Disparos
+            </h1>
+            <p className="text-gray-600">
+              Gerencie suas campanhas de mensagens WhatsApp
+            </p>
+          </div>
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Novo Disparo
+          </Button>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Novo Disparo
-        </Button>
       </div>
 
       {/* Lista de Disparos */}

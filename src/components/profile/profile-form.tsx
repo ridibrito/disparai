@@ -13,7 +13,8 @@ type UsersUpdate = Database['public']['Tables']['users']['Update'];
 import toast from 'react-hot-toast';
 
 import { Button } from '@/components/ui/button';
-import { Upload, Pencil, Save, X } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Upload, Pencil, Save, X, Building2, Globe, MapPin, Phone, Mail, User } from 'lucide-react';
 import {
   Form,
   FormControl,
@@ -51,6 +52,25 @@ const profileFormSchema = z.object({
       message: 'Telefone inválido',
     }),
   bio: z.string().max(280, { message: 'Bio deve ter no máximo 280 caracteres' }).optional().or(z.literal('')),
+  // Campos da empresa (opcionais)
+  company_name: z.string().min(2, {
+    message: 'O nome da empresa deve ter pelo menos 2 caracteres',
+  }).optional(),
+  company_description: z.string().optional(),
+  company_website: z.string().url().optional().or(z.literal('')),
+  company_sector: z.string().optional(),
+  company_phone: z
+    .string()
+    .transform((val) => onlyDigits(val || ''))
+    .refine((val) => val === '' || val.length === 10 || val.length === 11, {
+      message: 'Telefone da empresa inválido',
+    }),
+  company_email: z.string().email().optional().or(z.literal('')),
+  company_address: z.string().optional(),
+  company_city: z.string().optional(),
+  company_state: z.string().optional(),
+  company_zip_code: z.string().optional(),
+  company_country: z.string().optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -59,9 +79,11 @@ type ProfileFormProps = {
   userId: string;
   userEmail: string;
   initialData?: any;
+  organizationData?: any;
+  canEditCompany?: boolean;
 };
 
-export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps) {
+export function ProfileForm({ userId, userEmail, initialData, organizationData, canEditCompany = false }: ProfileFormProps) {
   const router = useRouter();
   const supabase = createClientComponentClient();
   const [isLoading, setIsLoading] = useState(false);
@@ -73,8 +95,10 @@ export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditingPersonal, setIsEditingPersonal] = useState(false);
+  const [isEditingCompany, setIsEditingCompany] = useState(false);
   const [recentlySaved, setRecentlySaved] = useState(false);
+  const [activeTab, setActiveTab] = useState('personal');
   
   // Configurar o formulário
   const maskedInitialPhone = formatBrazilPhone(initialData?.phone || '');
@@ -84,6 +108,18 @@ export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps
       full_name: initialData?.full_name || '',
       phone: maskedInitialPhone,
       bio: initialData?.bio || '',
+      // Dados da empresa
+      company_name: organizationData?.company_name || '',
+      company_description: organizationData?.company_description || '',
+      company_website: organizationData?.company_website || '',
+      company_sector: organizationData?.company_sector || '',
+      company_phone: formatBrazilPhone(organizationData?.company_phone || ''),
+      company_email: organizationData?.company_email || '',
+      company_address: organizationData?.company_address || '',
+      company_city: organizationData?.company_city || '',
+      company_state: organizationData?.company_state || '',
+      company_zip_code: organizationData?.company_zip_code || '',
+      company_country: organizationData?.company_country || 'Brasil',
     },
   });
 
@@ -118,13 +154,14 @@ export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps
         !pendingAvatarFile;
       if (nothingChanged) {
         toast.success('Nada para salvar');
-        setIsEditing(false);
+        setIsEditingPersonal(false);
+        setIsEditingCompany(false);
         setIsLoading(false);
         return;
       }
 
-      // Atualizar apenas campos existentes na tabela public.users
-      const { error } = await (supabase as any)
+      // Atualizar dados do usuário
+      const { error: userError } = await (supabase as any)
         .from('users')
         .update({ 
           full_name: values.full_name,
@@ -135,7 +172,30 @@ export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps
         })
         .eq('id', userId);
       
-      if (error) throw error;
+      if (userError) throw userError;
+
+      // Atualizar dados da empresa (apenas se o usuário tem permissão)
+      if (canEditCompany && organizationData) {
+        const { error: orgError } = await (supabase as any)
+          .from('organizations')
+          .update({
+            company_name: values.company_name || null,
+            company_description: values.company_description || null,
+            company_website: values.company_website || null,
+            company_sector: values.company_sector || null,
+            company_phone: values.company_phone || null,
+            company_email: values.company_email || null,
+            company_address: values.company_address || null,
+            company_city: values.company_city || null,
+            company_state: values.company_state || null,
+            company_zip_code: values.company_zip_code || null,
+            company_country: values.company_country || 'Brasil',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', organizationData.id);
+        
+        if (orgError) throw orgError;
+      }
       
       toast.success('Perfil atualizado com sucesso!');
       // Atualiza estado de última gravação e desliga modo edição
@@ -155,7 +215,8 @@ export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps
         setPendingAvatarFile(null);
       }
       form.reset({ full_name: values.full_name, phone: maskedPhone, bio: values.bio || '' });
-      setIsEditing(false);
+      setIsEditingPersonal(false);
+      setIsEditingCompany(false);
       setRecentlySaved(true);
       setTimeout(() => setRecentlySaved(false), 2000);
       router.refresh();
@@ -170,8 +231,23 @@ export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps
   
   return (
     <div className="space-y-8">
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="personal" className="flex items-center gap-2">
+            <User className="w-4 h-4" />
+            Pessoal
+          </TabsTrigger>
+          {canEditCompany && (
+            <TabsTrigger value="company" className="flex items-center gap-2">
+              <Building2 className="w-4 h-4" />
+              Empresa
+            </TabsTrigger>
+          )}
+        </TabsList>
+
+        <TabsContent value="personal" className="space-y-6">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">
         <div className="space-y-4">
           {/* Avatar no topo */}
           <div className="flex items-center gap-4">
@@ -209,7 +285,7 @@ export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps
                   setTempAvatarUrl(localUrl);
                   setAvatarUrl(localUrl);
                   setPendingAvatarFile(file);
-                  setIsEditing(true);
+                  setIsEditingPersonal(true);
                   // limpa o valor para permitir reupload do mesmo arquivo
                   if (e.target) {
                     try { e.target.value = ''; } catch {}
@@ -238,7 +314,7 @@ export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps
                 <FormItem>
                   <FormLabel>Nome Completo</FormLabel>
                   <FormControl>
-                    <Input placeholder="Seu nome completo" {...field} disabled={!isEditing} className="h-11" />
+                    <Input placeholder="Seu nome completo" {...field} disabled={!isEditingPersonal} className="h-11" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -255,7 +331,7 @@ export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps
                       placeholder="(11) 99999-9999"
                       value={field.value || ''}
                       onChange={(e) => field.onChange(formatBrazilPhone(e.target.value))}
-                      disabled={!isEditing}
+                      disabled={!isEditingPersonal}
                       className="h-11"
                     />
                   </FormControl>
@@ -276,7 +352,7 @@ export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps
                 <FormItem className="md:col-span-2">
                   <FormLabel>Bio</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Fale brevemente sobre você (máx. 280 caracteres)" {...field} disabled={!isEditing} className="min-h-[120px]" />
+                    <Textarea placeholder="Fale brevemente sobre você (máx. 280 caracteres)" {...field} disabled={!isEditingPersonal} className="min-h-[120px]" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -289,9 +365,9 @@ export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps
             {recentlySaved ? (
               <span className="text-sm text-green-600">Salvo</span>
             ) : <span />}
-            {!isEditing ? (
+            {!isEditingPersonal ? (
               <div className="flex gap-2">
-                <Button type="button" onClick={() => setIsEditing(true)} className="text-white" style={{ backgroundColor: '#4bca59' }}>
+                <Button type="button" onClick={() => setIsEditingPersonal(true)} className="text-white" style={{ backgroundColor: '#4bca59' }}>
                   <Pencil className="w-4 h-4 mr-2" />
                   Editar
                 </Button>
@@ -305,7 +381,7 @@ export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps
                     // Volta aos últimos valores salvos
                     form.reset({ full_name: lastSaved.full_name, phone: lastSaved.phone, bio: lastSaved.bio });
                     setAvatarUrl(lastSaved.avatarUrl);
-                    setIsEditing(false);
+                    setIsEditingPersonal(false);
                   }}
                 >
                   <X className="w-4 h-4 mr-2" />
@@ -320,10 +396,148 @@ export function ProfileForm({ userId, userEmail, initialData }: ProfileFormProps
           </div>
 
           
-        </div>
-        
-      </form>
-    </Form>
+            </div>
+          </form>
+        </Form>
+        </TabsContent>
+
+        {canEditCompany && (
+          <TabsContent value="company" className="space-y-6">
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">
+                <div className="space-y-4">
+                  {/* Logo da empresa */}
+                  <div className="flex items-center gap-4">
+                    <div className="w-24 h-24 rounded-lg bg-gray-200 overflow-hidden flex items-center justify-center ring-1 ring-gray-200">
+                      {organizationData?.company_logo_url ? (
+                        <Image src={organizationData.company_logo_url} alt="Logo da empresa" width={96} height={96} className="w-24 h-24 object-cover" />
+                      ) : (
+                        <Building2 className="w-8 h-8 text-gray-500" />
+                      )}
+                    </div>
+                    <div>
+                      <Button
+                        type="button"
+                        disabled={uploading}
+                        variant="ghost"
+                        className="inline-flex items-center gap-2 h-10 px-3 border-2 border-dashed border-gray-300 text-gray-700 bg-transparent hover:bg-transparent"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Upload className="w-4 h-4" />
+                        Alterar logo
+                      </Button>
+                      <p className="text-xs text-gray-500 mt-1">PNG/JPG até 5MB • O logo será atualizado ao salvar</p>
+                    </div>
+                  </div>
+
+                  {/* Campos da empresa */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="company_name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nome da Empresa</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Nome da sua empresa" {...field} disabled={!isEditingCompany} className="h-11" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="company_sector"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Setor</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Ex: Tecnologia, Varejo, Serviços" {...field} disabled={!isEditingCompany} className="h-11" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="company_website"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Website</FormLabel>
+                          <FormControl>
+                            <Input placeholder="https://suaempresa.com" {...field} disabled={!isEditingCompany} className="h-11" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="company_email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>E-mail da Empresa</FormLabel>
+                          <FormControl>
+                            <Input placeholder="contato@suaempresa.com" {...field} disabled={!isEditingCompany} className="h-11" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="company_description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Descrição da Empresa</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            placeholder="Descreva brevemente sua empresa e seus serviços..." 
+                            {...field} 
+                            disabled={!isEditingCompany} 
+                            className="min-h-[100px]"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Botões de ação */}
+                  <div className="flex justify-end pt-4">
+                    {!isEditingCompany ? (
+                      <Button type="button" onClick={() => setIsEditingCompany(true)} className="text-white" style={{ backgroundColor: '#4bca59' }}>
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Editar
+                      </Button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                          onClick={() => setIsEditingCompany(false)}
+                        >
+                          <X className="w-4 h-4 mr-2" />
+                          Cancelar
+                        </Button>
+                        <Button type="submit" disabled={isLoading} className="text-white" style={{ backgroundColor: '#4bca59' }}>
+                          <Save className="w-4 h-4 mr-2" />
+                          {isLoading ? 'Salvando...' : 'Salvar Alterações'}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </form>
+            </Form>
+          </TabsContent>
+        )}
+      </Tabs>
     
     <div className="mt-10 max-w-2xl bg-white border border-gray-200 rounded-lg p-6">
       <div className="mb-4">

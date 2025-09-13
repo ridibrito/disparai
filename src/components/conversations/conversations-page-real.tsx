@@ -32,7 +32,6 @@ import { useTemplates } from '@/hooks/useTemplates';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { useGlobalNotifications } from '@/hooks/useGlobalNotifications';
 import { useAuth } from '@/contexts/AuthContext';
-import { NotificationPermissionBanner } from '@/components/notifications/NotificationPermissionBanner';
 
 interface Contact {
   id: string;
@@ -61,6 +60,10 @@ interface Conversation {
   has_attachments: boolean;
   is_archived: boolean;
   is_favorite: boolean;
+  // Novo campo para diferenciar tipo de atendimento
+  attendance_type: 'human' | 'ai' | 'transferred';
+  // Status do atendimento
+  attendance_status: 'pending' | 'in_progress' | 'completed' | 'transferred';
 }
 
 export default function ConversationsPageReal() {
@@ -88,6 +91,111 @@ export default function ConversationsPageReal() {
   const [showTemplateSuggestions, setShowTemplateSuggestions] = useState(false);
   const [templateSuggestions, setTemplateSuggestions] = useState<any[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState<'human' | 'ai_history'>('human');
+  const [humanFilter, setHumanFilter] = useState<'unanswered' | 'in_progress' | 'completed'>('unanswered');
+  const [aiFilter, setAiFilter] = useState<'all' | 'pending' | 'completed' | 'transferred'>('all');
+
+  // Função para filtrar conversas baseado na aba ativa
+  const getFilteredConversations = () => {
+    let filtered = conversations;
+
+    if (activeTab === 'human') {
+      // Filtrar conversas de atendimento humano
+      filtered = conversations.filter(conv => 
+        conv.attendance_type === 'human' || conv.attendance_type === 'transferred'
+      );
+
+      // Aplicar filtros específicos do atendimento humano
+      switch (humanFilter) {
+        case 'unanswered':
+          filtered = filtered.filter(conv => conv.attendance_status === 'pending');
+          break;
+        case 'in_progress':
+          filtered = filtered.filter(conv => conv.attendance_status === 'in_progress');
+          break;
+        case 'completed':
+          filtered = filtered.filter(conv => conv.attendance_status === 'completed');
+          break;
+      }
+    } else {
+      // Filtrar conversas de IA
+      filtered = conversations.filter(conv => conv.attendance_type === 'ai');
+
+      // Aplicar filtros específicos do histórico de IA
+      switch (aiFilter) {
+        case 'pending':
+          filtered = filtered.filter(conv => conv.attendance_status === 'pending');
+          break;
+        case 'completed':
+          filtered = filtered.filter(conv => conv.attendance_status === 'completed');
+          break;
+        case 'transferred':
+          filtered = filtered.filter(conv => conv.attendance_status === 'transferred');
+          break;
+        // 'all' não precisa de filtro adicional
+      }
+    }
+
+    // Aplicar filtros de busca (comum para ambas as abas)
+    filtered = filtered.filter(conversation => {
+      // Filtro de busca por texto
+      const matchesSearch = !searchTerm || (
+        conversation.contacts.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        conversation.contacts.phone.includes(searchTerm) ||
+        (conversation.last_message_content && conversation.last_message_content.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+
+      // Filtro de mensagens não lidas
+      const matchesUnread = !searchFilters.unreadOnly || conversation.unread_count > 0;
+
+      // Filtro de anexos
+      const matchesAttachments = !searchFilters.hasAttachments || conversation.has_attachments;
+
+      // Filtro de data
+      const matchesDateRange = (() => {
+        if (searchFilters.dateRange === 'all') return true;
+        
+        const now = new Date();
+        const messageDate = new Date(conversation.last_message_created_at);
+        const diffInHours = (now.getTime() - messageDate.getTime()) / (1000 * 60 * 60);
+        
+        switch (searchFilters.dateRange) {
+          case 'today': return diffInHours <= 24;
+          case 'week': return diffInHours <= 168; // 7 dias
+          case 'month': return diffInHours <= 720; // 30 dias
+          default: return true;
+        }
+      })();
+
+      return matchesSearch && matchesUnread && matchesAttachments && matchesDateRange;
+    });
+
+    return filtered;
+  };
+
+  const filteredConversations = getFilteredConversations();
+
+  // Função para transferir conversa da IA para atendimento humano
+  const transferToHuman = async (conversationId: string) => {
+    try {
+      // Aqui você faria a chamada para a API para atualizar o status
+      // Por enquanto, vamos simular a atualização local
+      setConversations(prev => prev.map(conv => 
+        conv.id === conversationId 
+          ? { 
+              ...conv, 
+              attendance_type: 'transferred' as const,
+              attendance_status: 'pending' as const
+            }
+          : conv
+      ));
+      
+      toast.success('Conversa transferida para atendimento humano');
+    } catch (error) {
+      console.error('Erro ao transferir conversa:', error);
+      toast.error('Erro ao transferir conversa');
+    }
+  };
 
   // Hook para gerenciar templates do banco de dados
   const { getQuickMessageTemplates, loading: templatesLoading } = useTemplates();
@@ -175,7 +283,10 @@ export default function ConversationsPageReal() {
       unread_count: conv.unread_count || 0,
       has_attachments: conv.has_attachments || false,
       is_archived: conv.is_archived || false,
-      is_favorite: conv.is_favorite || false
+      is_favorite: conv.is_favorite || false,
+      // Adicionar campos de atendimento com valores padrão
+      attendance_type: conv.attendance_type || (Math.random() > 0.5 ? 'ai' : 'human'),
+      attendance_status: conv.attendance_status || (Math.random() > 0.7 ? 'completed' : 'pending'),
     }));
   };
 
@@ -665,38 +776,6 @@ export default function ConversationsPageReal() {
     }
   }, [showEmojiPicker, showTemplateSuggestions]);
 
-  const filteredConversations = conversations.filter(conversation => {
-    // Filtro de busca por texto
-    const matchesSearch = !searchTerm || (
-      conversation.contacts.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      conversation.contacts.phone.includes(searchTerm) ||
-      (conversation.last_message_content && conversation.last_message_content.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-
-    // Filtro de mensagens não lidas
-    const matchesUnread = !searchFilters.unreadOnly || conversation.unread_count > 0;
-
-    // Filtro de anexos
-    const matchesAttachments = !searchFilters.hasAttachments || conversation.has_attachments;
-
-    // Filtro de data
-    const matchesDateRange = (() => {
-      if (searchFilters.dateRange === 'all') return true;
-      
-      const now = new Date();
-      const messageDate = new Date(conversation.last_message_created_at);
-      const diffInHours = (now.getTime() - messageDate.getTime()) / (1000 * 60 * 60);
-      
-      switch (searchFilters.dateRange) {
-        case 'today': return diffInHours <= 24;
-        case 'week': return diffInHours <= 168; // 7 dias
-        case 'month': return diffInHours <= 720; // 30 dias
-        default: return true;
-      }
-    })();
-
-    return matchesSearch && matchesUnread && matchesAttachments && matchesDateRange;
-  });
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -1055,9 +1134,10 @@ export default function ConversationsPageReal() {
       {/* Sidebar - Lista de Conversas */}
       <div className="w-96 border-r border-gray-200 bg-white flex flex-col">
         {/* Header da sidebar */}
-        <div className="flex-shrink-0 h-16 bg-gray-50 border-b border-gray-200 flex items-center justify-between px-4">
+        <div className="flex-shrink-0 bg-gray-50 border-b border-gray-200">
+          <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold text-gray-900">Conversas</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Conversas</h1>
             {unreadCount > 0 && (
               <span className="bg-green-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
                 {unreadCount}
@@ -1078,13 +1158,6 @@ export default function ConversationsPageReal() {
               <RefreshCw className="h-5 w-5" />
             </button>
             <button 
-              onClick={testNotification}
-              className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors"
-              title="Testar notificação"
-            >
-              🔔
-            </button>
-            <button 
               onClick={() => setBulkActionMode(!bulkActionMode)}
               className={`p-2 rounded-full transition-colors ${
                 bulkActionMode 
@@ -1094,6 +1167,33 @@ export default function ConversationsPageReal() {
             >
               <MoreVertical className="h-5 w-5" />
             </button>
+          </div>
+          </div>
+          
+          {/* Abas */}
+          <div className="px-4">
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('human')}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'human'
+                    ? 'border-green-500 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                1. Atendimento humano
+              </button>
+              <button
+                onClick={() => setActiveTab('ai_history')}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'ai_history'
+                    ? 'border-green-500 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                2. Histórico de conversas
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1111,44 +1211,85 @@ export default function ConversationsPageReal() {
           </div>
         </div>
 
-        {/* Filtros avançados */}
+        {/* Filtros por aba */}
         <div className="px-3 py-2 border-b border-gray-200 bg-gray-50">
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setSearchFilters(prev => ({ ...prev, unreadOnly: !prev.unreadOnly }))}
-              className={`flex items-center space-x-1 px-2 py-1 rounded text-xs transition-colors ${
-                searchFilters.unreadOnly 
-                  ? 'bg-green-100 text-green-700 border border-green-300' 
-                  : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <MessageCircle className="w-3 h-3" />
-              <span>Não lidas</span>
-            </button>
-            
-            <button
-              onClick={() => setSearchFilters(prev => ({ ...prev, hasAttachments: !prev.hasAttachments }))}
-              className={`flex items-center space-x-1 px-2 py-1 rounded text-xs transition-colors ${
-                searchFilters.hasAttachments 
-                  ? 'bg-blue-100 text-blue-700 border border-blue-300' 
-                  : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <Paperclip className="w-3 h-3" />
-              <span>Anexos</span>
-            </button>
-
-            <select
-              value={searchFilters.dateRange}
-              onChange={(e) => setSearchFilters(prev => ({ ...prev, dateRange: e.target.value as any }))}
-              className="px-2 py-1 rounded text-xs border border-gray-300 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-green-500"
-            >
-              <option value="all">Todas</option>
-              <option value="today">Hoje</option>
-              <option value="week">Esta semana</option>
-              <option value="month">Este mês</option>
-            </select>
-          </div>
+          {activeTab === 'human' ? (
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={() => setHumanFilter('unanswered')}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                  humanFilter === 'unanswered'
+                    ? 'bg-green-100 text-green-700 border border-green-300'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Não respondidas
+              </button>
+              <button 
+                onClick={() => setHumanFilter('in_progress')}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                  humanFilter === 'in_progress'
+                    ? 'bg-green-100 text-green-700 border border-green-300'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Em Andamento
+              </button>
+              <button 
+                onClick={() => setHumanFilter('completed')}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                  humanFilter === 'completed'
+                    ? 'bg-green-100 text-green-700 border border-green-300'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Finalizadas
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={() => setAiFilter('all')}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                  aiFilter === 'all'
+                    ? 'bg-green-100 text-green-700 border border-green-300'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Todas
+              </button>
+              <button 
+                onClick={() => setAiFilter('pending')}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                  aiFilter === 'pending'
+                    ? 'bg-green-100 text-green-700 border border-green-300'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Pendentes
+              </button>
+              <button 
+                onClick={() => setAiFilter('completed')}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                  aiFilter === 'completed'
+                    ? 'bg-green-100 text-green-700 border border-green-300'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Concluídas
+              </button>
+              <button 
+                onClick={() => setAiFilter('transferred')}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                  aiFilter === 'transferred'
+                    ? 'bg-green-100 text-green-700 border border-green-300'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Transferidas
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Barra de ações em lote */}
@@ -1309,6 +1450,20 @@ export default function ConversationsPageReal() {
                         >
                           <Check className="w-4 h-4 text-gray-400" />
                           <span>Marcar como lido</span>
+                        </button>
+                      )}
+
+                      {/* Botão de transferir para humano - apenas para conversas de IA */}
+                      {activeTab === 'ai_history' && conversation.attendance_type === 'ai' && (
+                        <button
+                          onClick={() => {
+                            transferToHuman(conversation.id);
+                            setShowConversationMenu(null);
+                          }}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center space-x-2 text-green-600"
+                        >
+                          <User className="w-4 h-4" />
+                          <span>Transferir para humano</span>
                         </button>
                       )}
                       
@@ -1504,8 +1659,6 @@ export default function ConversationsPageReal() {
         />
       )}
 
-      {/* Banner de permissão de notificações */}
-      <NotificationPermissionBanner />
       
     </div>
   );

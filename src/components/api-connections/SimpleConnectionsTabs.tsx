@@ -837,17 +837,19 @@ export default function SimpleConnectionsTabs() {
 
   return (
     <div className="space-y-6">
-        {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold text-gray-900">Conexões de API</h2>
-          <p className="text-gray-600 mt-1">Gerencie suas integrações com WhatsApp</p>
+      {/* Header */}
+      <div className="mb-8 mt-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Conexões API</h1>
+            <p className="text-gray-600">Gerencie suas integrações com WhatsApp</p>
+          </div>
+          <Button onClick={() => setIsModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nova Conexão
+          </Button>
         </div>
-        <Button onClick={() => setIsModalOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nova Conexão
-        </Button>
-        </div>
+      </div>
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
