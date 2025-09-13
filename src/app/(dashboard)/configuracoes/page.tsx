@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Settings, User, CreditCard, Wifi, Shield, Bell, Download, Users, FileText } from 'lucide-react';
+import { Settings, User, CreditCard, Wifi, Shield, Bot, Users, FileText } from 'lucide-react';
 
 export const metadata = {
   title: 'Configurações - disparai',
@@ -37,11 +37,11 @@ export default function ConfiguracoesPage() {
       color: 'text-red-500'
     },
     {
-      title: 'Notificações',
-      description: 'Configure suas notificações',
-      icon: Bell,
-      href: '/configuracoes/notificacoes',
-      color: 'text-yellow-500'
+      title: 'Agentes de IA',
+      description: 'Configure agentes para respostas automáticas',
+      icon: Bot,
+      href: '/configuracoes/agentes',
+      color: 'text-green-500'
     },
     {
       title: 'Usuários',
@@ -89,19 +89,6 @@ export default function ConfiguracoesPage() {
         })}
       </div>
 
-      {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Exportar dados</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <button className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-            <Download className="w-5 h-5 text-gray-500 mr-3" />
-            <div className="text-left">
-              <h3 className="font-medium text-gray-900">Exportar CSV</h3>
-              <p className="text-sm text-gray-500">Baixe seus dados de contatos e campanhas</p>
-            </div>
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

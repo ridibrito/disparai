@@ -17,11 +17,13 @@ import {
   Copy,
   Phone,
   Trash,
-  Settings
+  Settings,
+  Bot
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import SimpleWhatsAppConnection from './SimpleWhatsAppConnection';
 import NewConnectionModal from './NewConnectionModal';
+import AgentInstanceConfig from '@/components/ai-agents/agent-instance-config';
 import toast from 'react-hot-toast';
 
 interface ApiConnection {
@@ -872,6 +874,17 @@ export default function SimpleConnectionsTabs() {
             <MessageCircle className="w-4 h-4 inline mr-2 text-blue-500" />
               WhatsApp Cloud API
             </button>
+            <button
+            onClick={() => setActiveTab('agents')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'agents'
+                ? 'border-purple-500 text-purple-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+            <Bot className="w-4 h-4 inline mr-2 text-purple-500" />
+              Agentes de IA
+            </button>
         </nav>
         </div>
 
@@ -1078,6 +1091,53 @@ export default function SimpleConnectionsTabs() {
                       </div>
                     </CardContent>
                   </Card>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'agents' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900">Configuração de Agentes de IA</h2>
+                <p className="text-gray-600 mt-1">Configure quais agentes devem responder automaticamente em cada instância WhatsApp</p>
+              </div>
+              <Button 
+                onClick={() => window.location.href = '/configuracoes/agentes'}
+                className="bg-purple-500 hover:bg-purple-600"
+              >
+                <Bot className="w-4 h-4 mr-2" />
+                Gerenciar Agentes
+              </Button>
+            </div>
+
+            {/* Lista de instâncias com configuração de agentes */}
+            {disparaiConnections.length > 0 ? (
+              <div className="space-y-4">
+                {disparaiConnections.map((connection) => (
+                  <AgentInstanceConfig
+                    key={connection.id}
+                    whatsappInstanceId={connection.id}
+                    instanceName={connection.name}
+                  />
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <div className="flex flex-col items-center space-y-4">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
+                      <Bot className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900">Nenhuma instância WhatsApp</h3>
+                      <p className="text-gray-500 mt-1">
+                        Crie uma instância WhatsApp primeiro para configurar agentes de IA
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
         )}

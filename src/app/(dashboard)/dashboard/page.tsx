@@ -73,23 +73,23 @@ export default async function DashboardPage() {
   }
 
   const contactsCountPromise = withRange(
-    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('user_id', userId)
+    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId)
   );
   const campaignsCountPromise = withRange(
-    supabase.from('campaigns').select('id', { count: 'exact', head: true }).eq('user_id', userId)
+    supabase.from('campaigns').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId)
   );
   const recentCampaignsPromise = withRange(
-    supabase.from('campaigns').select('id, name, status, created_at').eq('user_id', userId)
+    supabase.from('campaigns').select('id, name, status, created_at').eq('organization_id', currentOrgId)
       .order('created_at', { ascending: false }).limit(5)
   );
   const failedCountPromise = withRange(
-    supabase.from('campaigns').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'failed')
+    supabase.from('campaigns').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId).eq('status', 'failed')
   );
-  const activeChatsPromise = supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'active');
+  const activeChatsPromise = supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('organization_id', currentOrgId).eq('status', 'active');
   const leads7dPromise = supabase
     .from('conversations')
     .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
+    .eq('organization_id', currentOrgId)
     .eq('status', 'active')
     .gte('created_at', new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString());
 

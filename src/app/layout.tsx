@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { ToastProvider } from "@/components/ui/toast-provider";
+import { Toaster } from "sonner";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -26,6 +27,7 @@ export default function RootLayout({
         <AuthProvider>
           <NotificationProvider>
             <ToastProvider />
+            <Toaster position="top-right" richColors />
             {children}
           </NotificationProvider>
         </AuthProvider>

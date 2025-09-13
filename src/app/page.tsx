@@ -390,7 +390,14 @@ export default function Home() {
       {/* Footer */}
       <footer className="py-10 bg-gray-900 text-white">
         <div className="container px-4 mx-auto text-center">
-          <Image src={'/logo_branca.png'} alt='logo disparai' width={140} height={42} className="mx-auto mb-6"/>
+          <Image 
+            src={'/logo_branca.png'} 
+            alt='logo disparai' 
+            width={140} 
+            height={42} 
+            className="mx-auto mb-6"
+            style={{ width: 'auto', height: 'auto' }}
+          />
           
           {/* Badges de confiança */}
           <div className="flex flex-wrap items-center justify-center gap-6 mb-6">

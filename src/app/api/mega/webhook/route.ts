@@ -173,7 +173,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: true, message: 'Mensagem duplicada ignorada' });
           }
 
-          const { error: messageError } = await supabase
+          const { data: savedMessage, error: messageError } = await supabase
             .from("messages")
             .insert({
               conversation_id: conversationId,
@@ -181,12 +181,41 @@ export async function POST(req: Request) {
               content: messageText,
               organization_id: instance.organization_id,
               created_at: new Date().toISOString()
-            });
+            })
+            .select()
+            .single();
 
           if (messageError) {
             console.error('❌ Erro ao salvar mensagem:', messageError);
           } else {
-            console.log('✅ Mensagem salva no banco de dados');
+            console.log('✅ Mensagem salva no banco de dados:', savedMessage.id);
+            
+            // Processar resposta automática do agente de IA
+            try {
+              console.log('🤖 Iniciando processamento de resposta automática...');
+              console.log('📞 Chamando API de processamento:', `${process.env.NEXT_PUBLIC_APP_URL}/api/ai/process-response`);
+              console.log('📝 Dados enviados:', { conversationId, messageId: savedMessage.id });
+              
+              const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/ai/process-response`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  conversationId: conversationId,
+                  messageId: savedMessage.id
+                }),
+              });
+
+              if (response.ok) {
+                const result = await response.json();
+                console.log('✅ Resposta automática processada:', result);
+              } else {
+                console.error('❌ Erro ao processar resposta automática:', response.status);
+              }
+            } catch (error) {
+              console.error('❌ Erro ao chamar API de resposta automática:', error);
+            }
           }
         }
       }
