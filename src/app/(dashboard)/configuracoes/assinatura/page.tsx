@@ -1,5 +1,6 @@
 import PricingPlans from '@/components/subscription/PricingPlans';
 import { createServerClient } from '@/lib/supabaseServer';
+import { BackButton } from '@/components/ui/back-button';
 
 export const metadata = {
   title: 'Assinatura - Configurações - disparai',
@@ -38,9 +39,12 @@ export default async function AssinaturaPage() {
 
   return (
     <div className="space-y-6">
-      <div className="mb-8 mt-4">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Assinatura</h1>
-        <p className="text-gray-600">Gerencie seu plano atual e explore outras opções.</p>
+      <div className="mb-8 mt-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Assinatura</h1>
+          <p className="text-gray-600">Gerencie seu plano atual e explore outras opções.</p>
+        </div>
+        <BackButton />
       </div>
       <div className="bg-white rounded-lg shadow p-6">
         <PricingPlans plans={normalized as any} currentPlanId={me?.plan_id as any} />

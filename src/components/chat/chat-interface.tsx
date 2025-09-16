@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Send, Phone, MoreVertical, Check, CheckCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { WhatsAppLoading } from '@/components/ui/whatsapp-loading';
 
 interface Message {
   id: string;
@@ -158,7 +159,10 @@ export function ChatInterface({ contact, userId, onSendMessage }: ChatInterfaceP
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {isLoading ? (
           <div className="flex justify-center items-center h-full">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+            <WhatsAppLoading 
+              size="lg" 
+              text="Carregando mensagens..." 
+            />
           </div>
         ) : (
           <>

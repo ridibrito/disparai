@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { WhatsAppLoading } from '@/components/ui/whatsapp-loading';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -140,7 +141,14 @@ export default function LoginForm() {
                 '--tw-ring-color': '#4bca59'
               } as any}
             >
-              {isLoading ? 'Entrando...' : 'Entrar'}
+              {isLoading ? (
+                <div className="flex items-center justify-center gap-2">
+                  <WhatsAppLoading size="sm" />
+                  Entrando...
+                </div>
+              ) : (
+                'Entrar'
+              )}
             </button>
 
             {/* Register Link */}

@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
+import { WhatsAppLoading } from '@/components/ui/whatsapp-loading';
 
 interface MessageTemplate {
   id: string;
@@ -283,7 +284,10 @@ export default function TemplatesManager() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+        <WhatsAppLoading 
+          size="lg" 
+          text="Carregando templates..." 
+        />
       </div>
     );
   }

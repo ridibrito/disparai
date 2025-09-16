@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { toast } from 'react-hot-toast';
+import { WhatsAppLoading } from '@/components/ui/whatsapp-loading';
 import Image from 'next/image';
 import Link from 'next/link';
 import PasswordInput from '@/components/ui/password-input';
@@ -255,7 +256,14 @@ export function SignupForm() {
                 '--tw-ring-color': '#4bca59'
               } as any}
             >
-              {loading ? 'Criando conta...' : 'Criar Conta'}
+              {loading ? (
+                <div className="flex items-center justify-center gap-2">
+                  <WhatsAppLoading size="sm" />
+                  Criando conta...
+                </div>
+              ) : (
+                'Criar Conta'
+              )}
             </button>
 
             {/* Login Link */}

@@ -35,6 +35,8 @@ import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { useGlobalNotifications } from '@/hooks/useGlobalNotifications';
 import { useAuth } from '@/contexts/AuthContext';
 import { useContactAvatar } from '@/hooks/useContactAvatar';
+import { WhatsAppInstanceSelector } from '@/components/whatsapp/whatsapp-instance-selector';
+import { WhatsAppLoading } from '@/components/ui/whatsapp-loading';
 
 interface Contact {
   id: string;
@@ -46,10 +48,10 @@ interface Contact {
 interface Message {
   id: string;
   conversation_id: string;
-  sender: 'user' | 'contact';
+  sender: 'user' | 'contact' | 'ai' | 'system';
   content: string;
   created_at: string;
-  status: 'sent' | 'delivered' | 'read' | 'failed';
+  status?: 'sent' | 'delivered' | 'read' | 'failed';
 }
 
 interface Conversation {
@@ -59,14 +61,14 @@ interface Conversation {
   last_message_created_at: string;
   created_at: string;
   contacts: Contact;
-  unread_count: number;
-  has_attachments: boolean;
-  is_archived: boolean;
-  is_favorite: boolean;
+  unread_count?: number;
+  has_attachments?: boolean;
+  is_archived?: boolean;
+  is_favorite?: boolean;
   // Novo campo para diferenciar tipo de atendimento
-  attendance_type: 'human' | 'ai' | 'transferred';
+  attendance_type?: 'human' | 'ai' | 'transferred';
   // Status do atendimento
-  attendance_status: 'pending' | 'in_progress' | 'completed' | 'transferred';
+  attendance_status?: 'pending' | 'in_progress' | 'completed' | 'transferred';
 }
 
 export default function ConversationsPageReal() {
@@ -91,12 +93,22 @@ export default function ConversationsPageReal() {
   const [bulkActionMode, setBulkActionMode] = useState(false);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [instanceRefreshTrigger, setInstanceRefreshTrigger] = useState(0);
   const [showTemplateSuggestions, setShowTemplateSuggestions] = useState(false);
   const [templateSuggestions, setTemplateSuggestions] = useState<any[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<'ai_active' | 'human'>('ai_active');
   const [aiFilter, setAiFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [humanFilter, setHumanFilter] = useState<'all' | 'unanswered' | 'in_progress' | 'completed'>('in_progress');
+  const [activeInstance, setActiveInstance] = useState<{
+    id: string;
+    instance_id: string;
+    phone_number: string;
+    name: string;
+    type: 'whatsapp_disparai' | 'whatsapp_cloud';
+    is_active: boolean;
+    created_at: string;
+  } | null>(null);
 
   // Função para filtrar conversas baseado na aba ativa
   const getFilteredConversations = () => {
@@ -167,10 +179,10 @@ export default function ConversationsPageReal() {
       );
 
       // Filtro de mensagens não lidas
-      const matchesUnread = !searchFilters.unreadOnly || conversation.unread_count > 0;
+      const matchesUnread = !searchFilters.unreadOnly || (conversation.unread_count || 0) > 0;
 
       // Filtro de anexos
-      const matchesAttachments = !searchFilters.hasAttachments || conversation.has_attachments;
+      const matchesAttachments = !searchFilters.hasAttachments || (conversation.has_attachments === true);
 
       // Filtro de data
       const matchesDateRange = (() => {
@@ -295,7 +307,7 @@ export default function ConversationsPageReal() {
               ...conv, 
               last_message_content: message.content,
               last_message_created_at: message.created_at,
-              unread_count: message.sender === 'contact' ? conv.unread_count + 1 : conv.unread_count
+              unread_count: message.sender === 'contact' ? (conv.unread_count || 0) + 1 : (conv.unread_count || 0)
             }
           : conv
       ));
@@ -338,8 +350,8 @@ export default function ConversationsPageReal() {
           const [moved] = updated.splice(existingIndex, 1);
           return [moved, ...updated];
         } else {
-          // Adicionar nova conversa
-          return [conversation, ...prev];
+        // Adicionar nova conversa
+        return [newConversation, ...prev];
         }
       });
 
@@ -357,9 +369,9 @@ export default function ConversationsPageReal() {
         attendance_type: conversation.attendance_type || 'ai',
         attendance_status: conversation.attendance_status || 'pending',
         unread_count: conversation.unread_count || 0,
-        has_attachments: conversation.has_attachments || false,
-        is_archived: conversation.is_archived || false,
-        is_favorite: conversation.is_favorite || false,
+        has_attachments: conversation.has_attachments === true,
+        is_archived: conversation.is_archived === true,
+        is_favorite: conversation.is_favorite === true,
       };
       setConversations(prev => [newConversation, ...prev]);
     }
@@ -741,10 +753,17 @@ export default function ConversationsPageReal() {
     fetchConversations();
   }, []);
 
+  // Handler para mudança de instância
+  const handleInstanceChange = (instance: any) => {
+    setActiveInstance(instance);
+    console.log('🔄 Instância alterada para:', instance.name);
+  };
+
   // Listener para marcar conversa como lida quando notificação for clicada
   useEffect(() => {
-    const handleMarkConversationAsRead = async (event: CustomEvent) => {
-      const { conversationId } = event.detail;
+    const handleMarkConversationAsRead = async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { conversationId } = customEvent.detail;
       console.log('🔔 Marcando conversa como lida via notificação:', conversationId);
       
       // Usar a função completa de marcar como lida
@@ -759,10 +778,10 @@ export default function ConversationsPageReal() {
       }
     };
 
-    window.addEventListener('markConversationAsRead', handleMarkConversationAsRead as EventListener);
+    window.addEventListener('markConversationAsRead', handleMarkConversationAsRead);
     
     return () => {
-      window.removeEventListener('markConversationAsRead', handleMarkConversationAsRead as EventListener);
+      window.removeEventListener('markConversationAsRead', handleMarkConversationAsRead);
     };
   }, [conversations, selectedConversation, handleMarkAsRead]);
 
@@ -826,7 +845,7 @@ export default function ConversationsPageReal() {
         setSelectedConversation(conversation);
         
         // Marcar como lida se tiver mensagens não lidas
-        if (conversation.unread_count > 0) {
+        if ((conversation.unread_count || 0) > 0) {
           handleMarkAsRead(conversationId);
         }
       }
@@ -1333,6 +1352,17 @@ export default function ConversationsPageReal() {
             </div>
           </div>
           
+          {/* WhatsApp Instance Selector */}
+          <div className="px-4 pb-3">
+            <WhatsAppInstanceSelector
+              onInstanceChange={handleInstanceChange}
+              showDetails={true}
+              isAdmin={true} // TODO: Check user role based on user permissions
+              className="justify-center"
+              refreshTrigger={instanceRefreshTrigger}
+            />
+          </div>
+          
           {/* Abas */}
           <div className="px-4">
             <div className="flex border-b border-gray-200">
@@ -1501,7 +1531,10 @@ export default function ConversationsPageReal() {
         <div className="flex-1 overflow-y-auto bg-white">
           {loadingConversations ? (
             <div className="flex items-center justify-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+              <WhatsAppLoading 
+                size="md" 
+                text="Carregando conversas..." 
+              />
             </div>
           ) : filteredConversations.length === 0 ? (
             <div className="text-center text-gray-400 py-8 text-sm">
@@ -1525,7 +1558,7 @@ export default function ConversationsPageReal() {
                     } else {
                       setSelectedConversation(conversation);
                       // Marcar como lida se tiver mensagens não lidas
-                      if (conversation.unread_count > 0) {
+                      if ((conversation.unread_count || 0) > 0) {
                         handleMarkAsRead(conversation.id);
                       }
                     }
@@ -1561,9 +1594,9 @@ export default function ConversationsPageReal() {
                           )}
                         </div>
                         <div className="flex items-center space-x-1 flex-shrink-0">
-                          {conversation.unread_count > 0 && (
+                          {(conversation.unread_count || 0) > 0 && (
                             <span className="bg-green-500 text-white text-xs rounded-full px-2 py-0.5 min-w-[20px] text-center">
-                              {conversation.unread_count}
+                              {conversation.unread_count || 0}
                             </span>
                           )}
                           <span className="text-xs text-gray-500">
@@ -1603,7 +1636,7 @@ export default function ConversationsPageReal() {
                         <span>{conversation.is_favorite ? 'Remover favorito' : 'Adicionar favorito'}</span>
                       </button>
                       
-                      {conversation.unread_count > 0 && (
+                      {(conversation.unread_count || 0) > 0 && (
                         <button
                           onClick={() => {
                             handleMarkAsRead(conversation.id);
@@ -1735,7 +1768,12 @@ export default function ConversationsPageReal() {
             >
               <div className="relative z-10 pb-4">
                 {loadingMessages ? (
-                  <div className="text-center text-gray-500 py-8">Carregando mensagens...</div>
+                  <div className="flex items-center justify-center py-8">
+                    <WhatsAppLoading 
+                      size="sm" 
+                      text="Carregando mensagens..." 
+                    />
+                  </div>
                 ) : messages.length === 0 ? (
                   <div className="text-center text-gray-400 py-8 text-sm">Nenhuma mensagem ainda</div>
                 ) : (

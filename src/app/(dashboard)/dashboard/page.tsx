@@ -5,6 +5,7 @@ import { QuickActions } from '@/components/dashboard/quick-actions';
 import { Users, Layers, Clock, AlertTriangle, MessageCircle, UserPlus } from 'lucide-react';
 import { PeriodFilter } from '@/components/dashboard/period-filter';
 import { cookies } from 'next/headers';
+import Image from 'next/image';
 
 export const metadata = {
   title: 'Dashboard - disparai',
@@ -33,7 +34,7 @@ export default async function DashboardPage() {
       // Buscar informações da organização
       const { data: orgData } = await supabase
         .from('organizations')
-        .select('name, company_name, owner_name')
+        .select('name, company_name, owner_name, company_logo_url')
         .eq('id', currentOrgId)
         .single();
         
@@ -121,10 +122,22 @@ export default async function DashboardPage() {
         {organizationInfo && (
           <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-xl font-bold">
-                  {organizationInfo.company_name?.charAt(0) || 'E'}
-                </span>
+              <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-white shadow-sm">
+                {organizationInfo.company_logo_url ? (
+                  <Image 
+                    src={organizationInfo.company_logo_url} 
+                    alt="Logo da empresa" 
+                    width={48} 
+                    height={48} 
+                    className="w-12 h-12 object-cover" 
+                  />
+                ) : (
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                    <span className="text-white text-xl font-bold">
+                      {organizationInfo.company_name?.charAt(0) || 'E'}
+                    </span>
+                  </div>
+                )}
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">

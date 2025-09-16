@@ -469,8 +469,7 @@ export const createClientComponentClient = (): SupabaseClient<Database> => {
   return supabaseClientInstance;
 };
 
-// Export para compatibilidade
-export const supabaseClient = createClientComponentClient();
+// Export para compatibilidade - removido para evitar instância global
 
 // Função para criar o cliente do Supabase no lado do servidor (com cookies)
 // Nota: utilitário de servidor foi movido para '@/lib/supabaseServer'

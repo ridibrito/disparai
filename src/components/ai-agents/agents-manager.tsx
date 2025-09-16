@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { WhatsAppLoading } from '@/components/ui/whatsapp-loading';
 import { createClientComponentClient } from '@/lib/supabase';
 import { AIAgent, AgentType, AGENT_TYPES, DEFAULT_AGENT_PROMPTS } from '@/types/ai-agents';
 import { Button } from '@/components/ui/button';
@@ -233,10 +234,10 @@ export default function AgentsManager() {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-4"></div>
-          <p>Carregando agentes...</p>
-        </div>
+        <WhatsAppLoading 
+          size="lg" 
+          text="Carregando agentes..." 
+        />
       </div>
     );
   }

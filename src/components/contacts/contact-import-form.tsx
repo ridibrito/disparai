@@ -13,6 +13,7 @@ import { Upload, FileText, AlertCircle, Check, AlertTriangle } from 'lucide-reac
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { useImport } from '@/contexts/import-context';
+import { WhatsAppLoading } from '@/components/ui/whatsapp-loading';
 import { DuplicateResolutionModal } from './duplicate-resolution-modal';
 import { useDuplicateDetection } from '@/hooks/use-duplicate-detection';
 
@@ -564,7 +565,14 @@ export function ContactImportForm({ userId, remainingContacts, compact = false }
               disabled={isUploading}
             >
               <Upload className="h-4 w-4 mr-2" />
-              {isUploading ? 'Processando...' : 'Importar Contatos'}
+              {isUploading ? (
+                <>
+                  <WhatsAppLoading size="sm" />
+                  Processando...
+                </>
+              ) : (
+                'Importar Contatos'
+              )}
             </Button>
           </div>
           {!compact && (

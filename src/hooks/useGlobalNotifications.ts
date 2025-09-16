@@ -176,10 +176,10 @@ export function useGlobalNotifications({
     
     const pollForNewMessages = async () => {
       try {
-        console.log('🔍 Polling executado para usuário:', userId);
+        // console.log('🔍 Polling executado para usuário:', userId); // Log removido para reduzir spam
         
-        // Buscar mensagens não lidas dos últimos 30 segundos
-        const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+        // Buscar mensagens não lidas dos últimos 5 minutos
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
         
         // Primeiro buscar a organização do usuário
         const { data: userData } = await supabase
@@ -188,7 +188,7 @@ export function useGlobalNotifications({
           .eq('id', userId)
           .single();
 
-        if (!userData?.organization_id) {
+        if (!(userData as any)?.organization_id) {
           console.log('🔍 Debug - Usuário sem organização');
           return;
         }
@@ -204,6 +204,8 @@ export function useGlobalNotifications({
             conversations!inner(
               id,
               contact_id,
+              user_id,
+              organization_id,
               last_message_content,
               last_message_created_at,
               unread_count,
@@ -211,8 +213,9 @@ export function useGlobalNotifications({
             )
           `)
           .eq('sender', 'contact')
-          .eq('organization_id', userData.organization_id)
-          .gte('created_at', thirtySecondsAgo)
+          .eq('conversations.organization_id', (userData as any).organization_id)
+          .eq('conversations.user_id', userId)
+          .gte('created_at', fiveMinutesAgo)
           .order('created_at', { ascending: false });
 
         if (error) {
@@ -224,7 +227,7 @@ export function useGlobalNotifications({
           console.log('🔔 Mensagens encontradas via polling:', messages.length);
           
           // Filtrar apenas mensagens não processadas
-          const newMessages = messages.filter(msg => !processedMessagesRef.current.has(msg.id));
+          const newMessages = (messages as any[]).filter(msg => !processedMessagesRef.current.has(msg.id));
           
           if (newMessages.length === 0) {
             console.log('⏭️ Nenhuma mensagem nova para processar');
@@ -234,11 +237,11 @@ export function useGlobalNotifications({
           console.log('🔔 Novas mensagens para processar:', newMessages.length);
           
           for (const message of newMessages) {
-            const conversation = message.conversations;
+            const conversation = (message as any).conversations;
             if (conversation) {
               // Marcar mensagem como processada ANTES de processar
-              processedMessagesRef.current.add(message.id);
-              console.log('✅ Processando nova mensagem:', message.id);
+              processedMessagesRef.current.add((message as any).id);
+              console.log('✅ Processando nova mensagem:', (message as any).id);
               await handleNewMessage(message, conversation);
             }
           }
@@ -248,8 +251,8 @@ export function useGlobalNotifications({
       }
     };
 
-    // Executar polling a cada 5 segundos
-    pollInterval = setInterval(pollForNewMessages, 5000);
+    // Executar polling a cada 30 segundos (menos agressivo)
+    pollInterval = setInterval(pollForNewMessages, 30000);
     
     // Limpar cache de mensagens processadas a cada 1 hora
     const cleanupInterval = setInterval(() => {

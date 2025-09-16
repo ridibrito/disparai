@@ -1,5 +1,6 @@
 import { createServerClient } from '@/lib/supabaseServer';
 import { ContactsTabs } from '@/components/contacts/contacts-tabs';
+import { GlobalInstanceSelector } from '@/components/whatsapp/global-instance-selector';
 import Link from 'next/link';
 
 export const metadata = {
@@ -31,8 +32,19 @@ export default async function ContatosPage() {
   return (
     <div className="space-y-6">
       <div className="mb-8 mt-4">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Contatos</h1>
-        <p className="text-gray-600">Gerencie suas listas de contatos para envio de mensagens.</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Contatos</h1>
+            <p className="text-gray-600">Gerencie suas listas de contatos para envio de mensagens.</p>
+          </div>
+          <div className="w-80">
+            <GlobalInstanceSelector 
+              className="w-full"
+              showDetails={true}
+              isAdmin={true}
+            />
+          </div>
+        </div>
       </div>
 
       <ContactsTabs userId={userId} contacts={(contacts as any) || []} lists={(lists as any) || []} remainingContacts={remainingContacts} />

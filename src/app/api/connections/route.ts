@@ -179,3 +179,105 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const connectionId = searchParams.get('id');
+
+    if (!connectionId) {
+      return NextResponse.json({ error: 'Connection ID is required' }, { status: 400 });
+    }
+
+    // Buscar a conexão para obter os dados necessários
+    const { data: connection, error: fetchError } = await supabase
+      .from('api_connections')
+      .select('*')
+      .eq('id', connectionId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (fetchError || !connection) {
+      return NextResponse.json({ error: 'Connection not found' }, { status: 404 });
+    }
+
+    console.log('🗑️ Iniciando exclusão da conexão:', connection.name);
+
+    // 1. Deletar instância no Mega API (se for Disparai)
+    if (connection.type === 'whatsapp_disparai' && connection.instance_id) {
+      try {
+        console.log('🌐 Deletando instância no Mega API:', connection.instance_id);
+        
+        const megaResponse = await fetch(`https://teste8.megaapi.com.br/rest/instance/${connection.instance_id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNC8wOS8yMDI1IiwibmFtZSI6IlRlc3RlIDgiLCJhZG1pbiI6dHJ1ZSwiaWF0IjoxNzU3MTAyOTU0fQ.R-h4NQDJBVnxlyInlC51rt_cW9_S3A1ZpffqHt-GWBs',
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (megaResponse.ok) {
+          console.log('✅ Instância deletada no Mega API');
+        } else {
+          console.warn('⚠️ Falha ao deletar instância no Mega API:', megaResponse.status);
+        }
+      } catch (error) {
+        console.error('❌ Erro ao deletar instância no Mega API:', error);
+        // Continuar mesmo se falhar na Mega API
+      }
+    }
+
+    // 2. Deletar da tabela whatsapp_instances (se existir)
+    if (connection.instance_id) {
+      try {
+        console.log('🗑️ Deletando da tabela whatsapp_instances:', connection.instance_id);
+        
+        const { error: instancesError } = await supabase
+          .from('whatsapp_instances')
+          .delete()
+          .eq('instance_id', connection.instance_id)
+          .eq('user_id', user.id);
+
+        if (instancesError) {
+          console.warn('⚠️ Erro ao deletar da whatsapp_instances:', instancesError);
+        } else {
+          console.log('✅ Removido da tabela whatsapp_instances');
+        }
+      } catch (error) {
+        console.error('❌ Erro ao deletar da whatsapp_instances:', error);
+      }
+    }
+
+    // 3. Deletar da tabela api_connections
+    console.log('🗑️ Deletando da tabela api_connections:', connectionId);
+    
+    const { error: deleteError } = await supabase
+      .from('api_connections')
+      .delete()
+      .eq('id', connectionId)
+      .eq('user_id', user.id);
+
+    if (deleteError) {
+      console.error('❌ Erro ao deletar conexão:', deleteError);
+      return NextResponse.json({ error: 'Failed to delete connection' }, { status: 500 });
+    }
+
+    console.log('✅ Conexão deletada com sucesso:', connection.name);
+
+    return NextResponse.json({ 
+      message: 'Conexão deletada com sucesso!',
+      deletedConnection: connection
+    });
+
+  } catch (error) {
+    console.error('DELETE /api/connections error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}

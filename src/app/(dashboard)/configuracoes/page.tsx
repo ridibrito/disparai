@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Settings, User, CreditCard, Wifi, Bot, Users, FileText } from 'lucide-react';
+import { Settings, User, CreditCard, Wifi, Bot, Users, FileText, MessageSquare } from 'lucide-react';
 
 export const metadata = {
   title: 'Configurações - disparai',
@@ -23,17 +23,10 @@ export default function ConfiguracoesPage() {
       color: 'text-green-500'
     },
     {
-      title: 'Conexões API',
-      description: 'Gerencie WhatsApp Cloud API e WhatsApp Disparai',
-      icon: Wifi,
-      href: '/configuracoes/conexao-api',
-      color: 'text-purple-500'
-    },
-    {
-      title: 'Agentes de IA',
-      description: 'Configure agentes para respostas automáticas',
-      icon: Bot,
-      href: '/configuracoes/agentes',
+      title: 'Central WhatsApp',
+      description: 'Gerencie todas as instâncias WhatsApp em um só lugar',
+      icon: MessageSquare,
+      href: '/configuracoes/central-whatsapp',
       color: 'text-green-500'
     },
     {
@@ -49,7 +42,7 @@ export default function ConfiguracoesPage() {
       icon: FileText,
       href: '/configuracoes/templates',
       color: 'text-indigo-500'
-    }
+    },
   ];
 
   return (

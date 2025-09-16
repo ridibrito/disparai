@@ -26,6 +26,7 @@ import CreateDisparoModal from './CreateDisparoModal';
 import DisparoDetailsModal from './DisparoDetailsModal';
 import { RealtimeStatsModal } from './RealtimeStatsModal';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
+import { WhatsAppLoading } from '@/components/ui/whatsapp-loading';
 
 interface Disparo {
   id: string;
@@ -406,17 +407,11 @@ export default function DisparosPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="mb-8 mt-4">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Disparos</h1>
-          <p className="text-gray-600">Carregando disparos...</p>
-        </div>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
-            <p>Carregando disparos...</p>
-          </div>
-        </div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <WhatsAppLoading 
+          size="lg" 
+          text="Carregando disparos..." 
+        />
       </div>
     );
   }

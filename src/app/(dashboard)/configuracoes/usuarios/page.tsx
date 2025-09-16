@@ -1,6 +1,8 @@
 import { createServerClient } from '@/lib/supabaseServer';
 import { MembersTable } from '@/components/organization/members-table';
+import { BackButton } from '@/components/ui/back-button';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export const metadata = {
   title: 'Usuários - Configurações - disparai',
@@ -30,7 +32,7 @@ export default async function UsuariosPage() {
       // Buscar informações da organização
       const { data: orgData, error: orgError } = await supabase
         .from('organizations')
-        .select('name, company_name, owner_name, owner_email')
+        .select('name, company_name, owner_name, owner_email, company_logo_url')
         .eq('id', currentOrgId)
         .single();
         
@@ -208,18 +210,34 @@ export default async function UsuariosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="mb-8 mt-4">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Usuários</h1>
-        <p className="text-gray-600">Gerencie os membros da sua organização.</p>
+      <div className="mb-8 mt-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Usuários</h1>
+          <p className="text-gray-600">Gerencie os membros da sua organização.</p>
+        </div>
+        <BackButton />
+      </div>
         
         {/* Informações da Empresa */}
         {organizationInfo && (
           <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <span className="text-blue-600 text-lg font-bold">
-                  {organizationInfo.company_name?.charAt(0) || 'E'}
-                </span>
+              <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-white shadow-sm">
+                {organizationInfo.company_logo_url ? (
+                  <Image 
+                    src={organizationInfo.company_logo_url} 
+                    alt="Logo da empresa" 
+                    width={40} 
+                    height={40} 
+                    className="w-10 h-10 object-cover" 
+                  />
+                ) : (
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-blue-600 text-lg font-bold">
+                      {organizationInfo.company_name?.charAt(0) || 'E'}
+                    </span>
+                  </div>
+                )}
               </div>
               <div>
                 <h3 className="font-semibold text-blue-900">
@@ -233,7 +251,6 @@ export default async function UsuariosPage() {
             </div>
           </div>
         )}
-      </div>
 
       {/* Informações do Plano e Limites */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">

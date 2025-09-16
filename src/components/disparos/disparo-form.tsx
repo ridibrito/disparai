@@ -29,6 +29,8 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent } from '@/components/ui/card';
 import { PlanLimitAlert } from '@/components/plan/plan-limit-alert';
+import { GlobalInstanceSelector } from '@/components/whatsapp/global-instance-selector';
+import { useWhatsAppInstance } from '@/contexts/WhatsAppInstanceContext';
 
 // Definir o esquema de validação
 const disparoFormSchema = z.object({
@@ -72,6 +74,7 @@ type DisparoFormProps = {
 export function DisparoForm({ userId, initialData, isEditing = false }: DisparoFormProps) {
   const router = useRouter();
   const supabase = createClientComponentClient();
+  const { activeInstance } = useWhatsAppInstance();
   const [apiCredentials, setApiCredentials] = useState<ApiCredential[]>([]);
   const [contactLists, setContactLists] = useState<ContactList[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -208,6 +211,11 @@ export function DisparoForm({ userId, initialData, isEditing = false }: DisparoF
   const onSubmit = async (values: DisparoFormValues) => {
     if (hasReachedLimit) {
       toast.error('Você atingiu o limite de mensagens do seu plano.');
+      return;
+    }
+    
+    if (!activeInstance) {
+      toast.error('Selecione uma instância WhatsApp para enviar o disparo.');
       return;
     }
     
@@ -370,6 +378,23 @@ export function DisparoForm({ userId, initialData, isEditing = false }: DisparoF
                 </FormItem>
               )}
             />
+            
+            {/* Seletor de Instância WhatsApp */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Instância WhatsApp
+              </label>
+              <GlobalInstanceSelector 
+                className="w-full"
+                showDetails={true}
+                isAdmin={true}
+              />
+              {activeInstance && (
+                <p className="text-xs text-gray-500">
+                  Disparo será enviado pela instância: <strong>{activeInstance.name}</strong>
+                </p>
+              )}
+            </div>
             
             <FormField
               control={form.control}

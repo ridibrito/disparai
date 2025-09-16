@@ -30,6 +30,7 @@ import {
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import toast from 'react-hot-toast';
+import { WhatsAppLoading } from '@/components/ui/whatsapp-loading';
 
 interface Contact {
   id: string;
@@ -577,8 +578,16 @@ export default function CreateDisparoModal({ isOpen, onClose, onSuccess }: Creat
                 type="button"
                 onClick={handleSubmit}
                 disabled={!validateStep(3) || loading}
+                className="flex items-center gap-2"
               >
-                {loading ? 'Criando...' : 'Criar Disparo'}
+                {loading ? (
+                  <>
+                    <WhatsAppLoading size="sm" />
+                    Criando...
+                  </>
+                ) : (
+                  'Criar Disparo'
+                )}
               </Button>
             )}
           </div>
